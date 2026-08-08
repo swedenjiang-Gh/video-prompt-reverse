@@ -2,21 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Video prompt reverse evidence manifest",
   "type": "object",
+  "additionalProperties": false,
   "required": ["media", "shots", "source_attribution"],
   "properties": {
     "media": {
       "type": "object",
-      "required": ["video_path", "duration_seconds", "width", "height", "fps"]
+      "additionalProperties": false,
+      "required": ["video_path", "duration_seconds", "width", "height", "fps"],
+      "properties": {
+        "video_path": {"type": "string", "minLength": 1},
+        "duration_seconds": {"type": "number", "minimum": 0.000001},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "fps": {"type": "number", "minimum": 0.000001}
+      }
     },
     "shots": {
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["id", "timestamps", "evidence"],
         "properties": {
+          "id": {"type": "string", "minLength": 1},
           "timestamps": {
             "type": "object",
-            "required": ["start", "end"]
+            "additionalProperties": false,
+            "required": ["start", "end"],
+            "properties": {
+              "start": {"type": "number", "minimum": 0},
+              "end": {"type": "number", "minimum": 0}
+            }
           },
           "evidence": {
             "type": "array",
@@ -24,7 +40,13 @@
             "maxItems": 3,
             "items": {
               "type": "object",
-              "required": ["role", "timestamp", "path"]
+              "additionalProperties": false,
+              "required": ["role", "timestamp", "path"],
+              "properties": {
+                "role": {"type": "string", "enum": ["entry", "peak", "exit"]},
+                "timestamp": {"type": "number", "minimum": 0},
+                "path": {"type": "string", "minLength": 1}
+              }
             }
           }
         }
@@ -32,7 +54,12 @@
     },
     "source_attribution": {
       "type": "object",
-      "required": ["intervals", "frames"]
+      "additionalProperties": false,
+      "required": ["intervals", "frames"],
+      "properties": {
+        "intervals": {"type": "string", "enum": ["event-scan"]},
+        "frames": {"type": "string", "enum": ["extracted-frames"]}
+      }
     }
   }
 }

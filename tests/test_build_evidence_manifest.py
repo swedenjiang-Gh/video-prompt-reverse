@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from scripts.build_evidence_manifest import build_manifest
+from scripts.build_evidence_manifest import (
+    build_manifest,
+    normalize_event_intervals,
+    validate_manifest,
+)
 
 
 def test_build_manifest_orders_bounded_shots_and_retains_three_evidence_points():
@@ -70,3 +74,68 @@ def test_build_manifest_rejects_evidence_outside_its_shot_bounds():
                 {"shot_id": "shot-1", "role": "exit", "timestamp": 4.1, "path": "frames/004100.jpg"},
             ],
         )
+
+
+def test_normalize_event_intervals_clamps_a_final_event_to_media_duration():
+    """Removing the duration clamp must make downstream extraction inconsistent."""
+    assert normalize_event_intervals(
+        [{"start": 8.0, "peak": 9.5, "end": 11.0, "peak_score": 7.0}],
+        10.0,
+    ) == [{"start": 8.0, "peak": 9.5, "end": 10.0, "peak_score": 7.0}]
+
+
+def test_validate_manifest_rejects_malformed_public_schema_instance():
+    """Removing public schema checks must allow invalid paths, roles, and extra fields."""
+    malformed = {
+        "media": {
+            "video_path": 42,
+            "duration_seconds": 12.0,
+            "width": 1920,
+            "height": 1080,
+            "fps": 24.0,
+        },
+        "shots": [
+            {
+                "id": "shot-1",
+                "timestamps": {"start": 0.0, "end": 4.0},
+                "evidence": [
+                    {"role": "entry", "timestamp": 0.1, "path": "frames/000100.jpg"},
+                    {"role": "peak", "timestamp": 2.0, "path": "frames/002000.jpg"},
+                    {"role": "exit", "timestamp": 3.9, "path": "frames/003900.jpg"},
+                ],
+                "unexpected": True,
+            }
+        ],
+        "source_attribution": {"intervals": "event-scan", "frames": "extracted-frames"},
+    }
+
+    with pytest.raises(ValueError, match="analysis schema"):
+        validate_manifest(malformed)
+
+
+def test_validate_manifest_requires_entry_peak_exit_in_order():
+    """Removing the role-structure check must accept duplicate evidence roles."""
+    malformed = {
+        "media": {
+            "video_path": "input/clip.mp4",
+            "duration_seconds": 12.0,
+            "width": 1920,
+            "height": 1080,
+            "fps": 24.0,
+        },
+        "shots": [
+            {
+                "id": "shot-1",
+                "timestamps": {"start": 0.0, "end": 4.0},
+                "evidence": [
+                    {"role": "entry", "timestamp": 0.1, "path": "frames/000100.jpg"},
+                    {"role": "entry", "timestamp": 2.0, "path": "frames/002000.jpg"},
+                    {"role": "exit", "timestamp": 3.9, "path": "frames/003900.jpg"},
+                ],
+            }
+        ],
+        "source_attribution": {"intervals": "event-scan", "frames": "extracted-frames"},
+    }
+
+    with pytest.raises(ValueError, match="entry, peak, and exit"):
+        validate_manifest(malformed)

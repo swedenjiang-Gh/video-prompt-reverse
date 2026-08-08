@@ -47,7 +47,7 @@ def build_manifest(video_path: Path, probe: dict, intervals: list[dict], frames:
             }
         )
 
-    return {
+    manifest = {
         "media": {
             "video_path": video_path.as_posix(),
             "duration_seconds": probe["duration_seconds"],
@@ -61,6 +61,85 @@ def build_manifest(video_path: Path, probe: dict, intervals: list[dict], frames:
             "frames": "extracted-frames",
         },
     }
+    validate_manifest(manifest)
+    return manifest
+
+
+def normalize_event_intervals(intervals: list[dict], duration: float) -> list[dict]:
+    """Clamp delegated event intervals so extraction uses media-bounded times."""
+    normalized = []
+    for interval in intervals:
+        start = max(0.0, interval["start"])
+        end = min(interval["end"], duration)
+        if start >= end:
+            continue
+        normalized.append(
+            {
+                **interval,
+                "start": start,
+                "peak": min(max(interval["peak"], start), end),
+                "end": end,
+            }
+        )
+    return normalized
+
+
+def _validate_schema(instance: object, schema: dict) -> None:
+    """Validate the small JSON Schema subset used by the public manifest schema."""
+    expected_type = schema.get("type")
+    if expected_type == "object":
+        if not isinstance(instance, dict):
+            raise ValueError("analysis schema requires an object")
+        properties = schema.get("properties", {})
+        missing = [key for key in schema.get("required", []) if key not in instance]
+        if missing:
+            raise ValueError("analysis schema has missing required properties")
+        if schema.get("additionalProperties") is False and set(instance) - set(properties):
+            raise ValueError("analysis schema forbids additional properties")
+        for key, value in instance.items():
+            if key in properties:
+                _validate_schema(value, properties[key])
+    elif expected_type == "array":
+        if not isinstance(instance, list):
+            raise ValueError("analysis schema requires an array")
+        if len(instance) < schema.get("minItems", 0) or len(instance) > schema.get("maxItems", float("inf")):
+            raise ValueError("analysis schema has an invalid array length")
+        for item in instance:
+            _validate_schema(item, schema["items"])
+    elif expected_type == "string":
+        if not isinstance(instance, str) or len(instance) < schema.get("minLength", 0):
+            raise ValueError("analysis schema requires a non-empty string")
+    elif expected_type == "number":
+        if isinstance(instance, bool) or not isinstance(instance, (int, float)):
+            raise ValueError("analysis schema requires a number")
+        if instance < schema.get("minimum", float("-inf")):
+            raise ValueError("analysis schema number is below minimum")
+    elif expected_type == "integer":
+        if isinstance(instance, bool) or not isinstance(instance, int):
+            raise ValueError("analysis schema requires an integer")
+        if instance < schema.get("minimum", float("-inf")):
+            raise ValueError("analysis schema integer is below minimum")
+
+    if "enum" in schema and instance not in schema["enum"]:
+        raise ValueError("analysis schema value is not allowed")
+
+
+def validate_manifest(manifest: dict) -> None:
+    """Validate a manifest against the shipped public schema and cross-field rules."""
+    schema_path = Path(__file__).resolve().parents[1] / "assets" / "analysis-schema.json"
+    _validate_schema(manifest, json.loads(schema_path.read_text(encoding="utf-8")))
+    previous_start = -1.0
+    duration = manifest["media"]["duration_seconds"]
+    for shot in manifest["shots"]:
+        start = shot["timestamps"]["start"]
+        end = shot["timestamps"]["end"]
+        if start < previous_start or start >= end or end > duration:
+            raise ValueError("analysis schema has invalid shot bounds")
+        if [frame["role"] for frame in shot["evidence"]] != ["entry", "peak", "exit"]:
+            raise ValueError("analysis schema requires entry, peak, and exit evidence")
+        if any(frame["timestamp"] < start or frame["timestamp"] > end for frame in shot["evidence"]):
+            raise ValueError("analysis schema evidence is outside shot bounds")
+        previous_start = start
 
 
 if __name__ == "__main__":
@@ -86,6 +165,15 @@ if __name__ == "__main__":
         text=True,
     )
     event_manifest = json.loads(event_manifest_path.read_text(encoding="utf-8"))
+    probe = json.loads(args.probe.read_text(encoding="utf-8"))
+    event_manifest["intervals"] = normalize_event_intervals(
+        event_manifest["intervals"],
+        probe["duration_seconds"],
+    )
+    event_manifest_path.write_text(
+        json.dumps(event_manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     intervals = [
         {"id": f"shot-{index:03d}", "start": item["start"], "end": item["end"]}
         for index, item in enumerate(event_manifest["intervals"], start=1)
@@ -102,7 +190,7 @@ if __name__ == "__main__":
     ]
     manifest = build_manifest(
         args.video_path,
-        json.loads(args.probe.read_text(encoding="utf-8")),
+        probe,
         intervals,
         frames,
     )
