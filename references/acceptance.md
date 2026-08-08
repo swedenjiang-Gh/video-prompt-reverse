@@ -5,7 +5,7 @@
 - Date: 2026-08-08
 - Source: authorized `shot_01_storytime.mp4`
 - Control condition: no `video-prompt-reverse` Skill
-- Baseline record: `D:\GitHub\video-prompt-reverse-planning\.superpowers\sdd\2026-08-08-video-prompt-reverse\baseline-without-skill.md`
+- Baseline record: an authorized no-Skill control analysis of the source video; it documented media facts, timestamped frames, T2V/I2V prompts, and explicit uncertainty.
 
 ## Observed baseline gaps
 
