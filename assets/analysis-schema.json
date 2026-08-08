@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Video prompt reverse evidence manifest",
+  "type": "object",
+  "required": ["media", "shots", "source_attribution"],
+  "properties": {
+    "media": {
+      "type": "object",
+      "required": ["video_path", "duration_seconds", "width", "height", "fps"]
+    },
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "timestamps", "evidence"],
+        "properties": {
+          "timestamps": {
+            "type": "object",
+            "required": ["start", "end"]
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "required": ["role", "timestamp", "path"]
+            }
+          }
+        }
+      }
+    },
+    "source_attribution": {
+      "type": "object",
+      "required": ["intervals", "frames"]
+    }
+  }
+}
