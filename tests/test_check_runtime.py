@@ -26,7 +26,7 @@ def _healthy_config(tmp_path: Path) -> dict:
     llama = tmp_path / "llama-cli.exe"
     llama.write_bytes(_minimal_pe())
     cuda = tmp_path / "cudart64_12.dll"
-    cuda.write_bytes(b"cuda")
+    cuda.write_bytes(_minimal_pe())
     return {
         "skycaptioner_root": skycaptioner.parent.parent,
         "qwen_root": qwen,
@@ -96,17 +96,32 @@ def test_check_runtime_rejects_an_unrelated_cuda_file(tmp_path):
     assert report["components"]["cuda"]["state"] == "missing"
 
 
-def test_check_runtime_rejects_a_cuda_evidence_directory(tmp_path):
-    """A directory cannot be static evidence for a usable CUDA runtime file."""
+def test_check_runtime_rejects_a_same_name_cuda_text_file(tmp_path):
+    """A recognized CUDA basename without a PE image is not usable evidence."""
     config = _healthy_config(tmp_path)
-    cuda_directory = tmp_path / "cuda"
-    cuda_directory.mkdir()
-    config["cuda_evidence_path"] = cuda_directory
+    config["cuda_evidence_path"].write_text("not a PE image", encoding="utf-8")
 
     report = check_runtime(config)
 
     assert report["state"] == "partial"
     assert report["components"]["cuda"]["state"] == "missing"
+
+
+def test_check_runtime_accepts_a_cuda_path_style_directory_without_reporting_it(tmp_path, monkeypatch):
+    """CUDA_PATH roots need a bounded bin marker check without leaking their value."""
+    config = _healthy_config(tmp_path)
+    cuda_root = tmp_path / "cuda-root-not-for-reporting"
+    cuda_marker = cuda_root / "bin" / "cudart64_12.dll"
+    cuda_marker.parent.mkdir(parents=True)
+    cuda_marker.write_bytes(_minimal_pe())
+    config.pop("cuda_evidence_path")
+    monkeypatch.setenv("CUDA_PATH", str(cuda_root))
+
+    report = check_runtime(config)
+
+    assert report["state"] == "ready"
+    assert report["components"]["cuda"]["state"] == "ready"
+    assert str(cuda_root) not in repr(report)
 
 
 def test_check_runtime_never_reports_secret_config_values(tmp_path):

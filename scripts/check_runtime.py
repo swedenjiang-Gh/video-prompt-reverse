@@ -39,8 +39,8 @@ def _component(state: str, label: str, **details: int | str) -> dict:
     return {"state": state, "label": label, **details}
 
 
-def _is_llama_executable(path: Path | None) -> tuple[bool, int]:
-    if path is None or not path.is_file() or path.suffix.lower() != ".exe":
+def _is_pe_file(path: Path | None) -> tuple[bool, int]:
+    if path is None or not path.is_file():
         return False, 0
     try:
         size = path.stat().st_size
@@ -57,13 +57,35 @@ def _is_llama_executable(path: Path | None) -> tuple[bool, int]:
         return False, 0
 
 
-def _is_cuda_evidence(path: Path | None) -> bool:
-    if path is None or not path.is_file():
-        return False
+def _is_llama_executable(path: Path | None) -> tuple[bool, int]:
+    if path is None or path.suffix.lower() != ".exe":
+        return False, 0
+    return _is_pe_file(path)
+
+
+def _is_cuda_marker(path: Path) -> bool:
     name = path.name.casefold()
-    return name in {"nvcuda.dll", "nvcc.exe"} or bool(
-        re.fullmatch(r"(?:cudart|cublas)64(?:_\d+)?\.dll", name)
-    )
+    if name not in {"nvcuda.dll", "nvcc.exe"} and not re.fullmatch(
+        r"(?:cudart|cublas)64(?:_\d+)?\.dll", name
+    ):
+        return False
+    return _is_pe_file(path)[0]
+
+
+def _is_cuda_evidence(path: Path | None) -> bool:
+    if path is None:
+        return False
+    if path.is_file():
+        return _is_cuda_marker(path)
+    if not path.is_dir():
+        return False
+    bin_directory = path / "bin"
+    if not bin_directory.is_dir():
+        return False
+    candidates = [bin_directory / "nvcuda.dll", bin_directory / "nvcc.exe"]
+    candidates.extend(bin_directory.glob("cudart64_*.dll"))
+    candidates.extend(bin_directory.glob("cublas64_*.dll"))
+    return any(_is_cuda_marker(candidate) for candidate in candidates)
 
 
 def check_runtime(config: Mapping[str, object]) -> dict:
