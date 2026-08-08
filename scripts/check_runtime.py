@@ -1,6 +1,7 @@
 """Read-only health checks for the local video-prompt-reverse runtime."""
 
 import os
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -44,9 +45,25 @@ def _is_llama_executable(path: Path | None) -> tuple[bool, int]:
     try:
         size = path.stat().st_size
         with path.open("rb") as executable:
-            return size > 2 and executable.read(2) == b"MZ", size
+            dos_header = executable.read(0x40)
+            if len(dos_header) < 0x40 or dos_header[:2] != b"MZ":
+                return False, size
+            pe_offset = int.from_bytes(dos_header[0x3C:0x40], "little")
+            if pe_offset < 0x40 or pe_offset + 4 > size:
+                return False, size
+            executable.seek(pe_offset)
+            return executable.read(4) == b"PE\0\0", size
     except OSError:
         return False, 0
+
+
+def _is_cuda_evidence(path: Path | None) -> bool:
+    if path is None or not path.is_file():
+        return False
+    name = path.name.casefold()
+    return name in {"nvcuda.dll", "nvcc.exe"} or bool(
+        re.fullmatch(r"(?:cudart|cublas)64(?:_\d+)?\.dll", name)
+    )
 
 
 def check_runtime(config: Mapping[str, object]) -> dict:
@@ -108,7 +125,7 @@ def check_runtime(config: Mapping[str, object]) -> dict:
     if not llama_ready:
         blockers.append("A usable llama.cpp executable is missing.")
 
-    cuda_ready = cuda_path is not None and cuda_path.exists()
+    cuda_ready = _is_cuda_evidence(cuda_path)
     components["cuda"] = _component("ready" if cuda_ready else "missing", "CUDA availability evidence")
     if not cuda_ready:
         blockers.append("CUDA availability evidence is missing.")
