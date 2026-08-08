@@ -4,12 +4,29 @@ from pathlib import Path
 from scripts.check_runtime import QWEN_SHARDS, check_runtime
 
 
-def _minimal_pe() -> bytes:
+def _minimal_pe_magic() -> bytes:
     header = bytearray(0x44)
     header[:2] = b"MZ"
     header[0x3C:0x40] = (0x40).to_bytes(4, "little")
     header[0x40:0x44] = b"PE\0\0"
     return bytes(header)
+
+
+def _coherent_pe() -> bytes:
+    pe_offset = 0x80
+    optional_header_size = 0xF0
+    section_table_offset = pe_offset + 4 + 20 + optional_header_size
+    image = bytearray(section_table_offset + 40)
+    image[:2] = b"MZ"
+    image[0x3C:0x40] = pe_offset.to_bytes(4, "little")
+    image[pe_offset : pe_offset + 4] = b"PE\0\0"
+    coff_offset = pe_offset + 4
+    image[coff_offset : coff_offset + 2] = (0x8664).to_bytes(2, "little")
+    image[coff_offset + 2 : coff_offset + 4] = (1).to_bytes(2, "little")
+    image[coff_offset + 16 : coff_offset + 18] = optional_header_size.to_bytes(2, "little")
+    optional_header_offset = coff_offset + 20
+    image[optional_header_offset : optional_header_offset + 2] = (0x20B).to_bytes(2, "little")
+    return bytes(image)
 
 
 def _healthy_config(tmp_path: Path) -> dict:
@@ -24,9 +41,9 @@ def _healthy_config(tmp_path: Path) -> dict:
         (qwen / shard).write_bytes(b"gguf")
 
     llama = tmp_path / "llama-cli.exe"
-    llama.write_bytes(_minimal_pe())
+    llama.write_bytes(_coherent_pe())
     cuda = tmp_path / "cudart64_12.dll"
-    cuda.write_bytes(_minimal_pe())
+    cuda.write_bytes(_coherent_pe())
     return {
         "skycaptioner_root": skycaptioner.parent.parent,
         "qwen_root": qwen,
@@ -62,14 +79,27 @@ def test_check_runtime_reports_missing_first_qwen_shard(tmp_path):
     assert any(QWEN_SHARDS[0] in blocker for blocker in report["blockers"])
 
 
-def test_check_runtime_reports_ready_for_healthy_cuda_llama_chain(tmp_path):
-    """Removing any required local component must prevent a ready report."""
+def test_check_runtime_reports_ready_for_structurally_coherent_cuda_llama_chain(tmp_path):
+    """Coherent PE headers make the static local chain eligible for ready."""
     report = check_runtime(_healthy_config(tmp_path))
 
     assert report["state"] == "ready"
     assert report["components"]["llama_cpp"]["state"] == "ready"
     assert report["components"]["cuda"]["state"] == "ready"
     assert report["components"]["qwen"]["shard_count"] == 5
+
+
+def test_check_runtime_rejects_minimal_pe_magic_for_llama_and_cuda(tmp_path):
+    """Magic-only PE payloads must not stand in for coherent executable evidence."""
+    config = _healthy_config(tmp_path)
+    config["llama_cpp_executable"].write_bytes(_minimal_pe_magic())
+    config["cuda_evidence_path"].write_bytes(_minimal_pe_magic())
+
+    report = check_runtime(config)
+
+    assert report["state"] == "partial"
+    assert report["components"]["llama_cpp"]["state"] == "missing"
+    assert report["components"]["cuda"]["state"] == "missing"
 
 
 def test_check_runtime_rejects_a_truncated_mz_only_llama_fixture(tmp_path):
@@ -113,7 +143,7 @@ def test_check_runtime_accepts_a_cuda_path_style_directory_without_reporting_it(
     cuda_root = tmp_path / "cuda-root-not-for-reporting"
     cuda_marker = cuda_root / "bin" / "cudart64_12.dll"
     cuda_marker.parent.mkdir(parents=True)
-    cuda_marker.write_bytes(_minimal_pe())
+    cuda_marker.write_bytes(_coherent_pe())
     config.pop("cuda_evidence_path")
     monkeypatch.setenv("CUDA_PATH", str(cuda_root))
 

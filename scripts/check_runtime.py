@@ -49,10 +49,27 @@ def _is_pe_file(path: Path | None) -> tuple[bool, int]:
             if len(dos_header) < 0x40 or dos_header[:2] != b"MZ":
                 return False, size
             pe_offset = int.from_bytes(dos_header[0x3C:0x40], "little")
-            if pe_offset < 0x40 or pe_offset + 4 > size:
+            coff_header_end = pe_offset + 24
+            if pe_offset < 0x40 or coff_header_end > size:
                 return False, size
             executable.seek(pe_offset)
-            return executable.read(4) == b"PE\0\0", size
+            header = executable.read(24)
+            if header[:4] != b"PE\0\0":
+                return False, size
+            machine = int.from_bytes(header[4:6], "little")
+            section_count = int.from_bytes(header[6:8], "little")
+            optional_header_size = int.from_bytes(header[20:22], "little")
+            if machine not in {0x14C, 0x8664} or section_count == 0:
+                return False, size
+            optional_header_end = coff_header_end + optional_header_size
+            section_table_end = optional_header_end + section_count * 40
+            if optional_header_size < 2 or section_table_end > size:
+                return False, size
+            executable.seek(coff_header_end)
+            optional_magic = int.from_bytes(executable.read(2), "little")
+            expected_magic = 0x10B if machine == 0x14C else 0x20B
+            minimum_optional_header_size = 0xE0 if machine == 0x14C else 0xF0
+            return optional_magic == expected_magic and optional_header_size >= minimum_optional_header_size, size
     except OSError:
         return False, 0
 
