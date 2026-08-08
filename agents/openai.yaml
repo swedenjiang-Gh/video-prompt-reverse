@@ -1,0 +1,4 @@
+interface:
+  display_name: "Video Prompt Reverse"
+  short_description: "Reverse-engineer video prompts with evidence."
+  default_prompt: "Analyze this video and produce an evidence-backed reconstruction prompt."

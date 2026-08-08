@@ -1,0 +1,46 @@
+# Local machine and credentials
+local-machine/
+.env
+.env.*
+*.secret
+*.secrets
+*.key
+*.pem
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Runtime outputs and model weights
+runtime/
+outputs/
+work/
+models/
+weights/
+checkpoints/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.gguf
+
+# Media
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
