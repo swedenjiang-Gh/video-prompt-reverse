@@ -142,6 +142,37 @@ def validate_manifest(manifest: dict) -> None:
         previous_start = start
 
 
+def run_evidence_extraction(
+    video_path: Path,
+    probe: dict,
+    output_dir: Path,
+    video_learning_scripts: Path,
+) -> tuple[dict, list[dict]]:
+    """Scan, bound event intervals, then extract frames from those bounded intervals."""
+    event_manifest_path = output_dir / "event-manifest.json"
+    frame_dir = output_dir / "evidence-frames"
+    subprocess.run(
+        [sys.executable, str(video_learning_scripts / "scan_events.py"), str(video_path), "--output", str(event_manifest_path)],
+        check=True,
+    )
+    event_manifest = json.loads(event_manifest_path.read_text(encoding="utf-8"))
+    event_manifest["intervals"] = normalize_event_intervals(
+        event_manifest["intervals"],
+        probe["duration_seconds"],
+    )
+    event_manifest_path.write_text(
+        json.dumps(event_manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    extracted = subprocess.run(
+        [sys.executable, str(video_learning_scripts / "extract_event_frames.py"), str(video_path), str(event_manifest_path), str(frame_dir)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return event_manifest, json.loads(extracted.stdout)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build a video-prompt-reverse evidence manifest.")
     parser.add_argument("video_path", type=Path)
@@ -151,28 +182,13 @@ if __name__ == "__main__":
 
     output_dir = Path("D:/VideoLearning/work") / args.task / "video-prompt-reverse"
     output_dir.mkdir(parents=True, exist_ok=True)
-    event_manifest_path = output_dir / "event-manifest.json"
-    frame_dir = output_dir / "evidence-frames"
     video_learning_scripts = Path(__file__).resolve().parents[2] / "video-learning" / "scripts"
-    subprocess.run(
-        [sys.executable, str(video_learning_scripts / "scan_events.py"), str(args.video_path), "--output", str(event_manifest_path)],
-        check=True,
-    )
-    extracted = subprocess.run(
-        [sys.executable, str(video_learning_scripts / "extract_event_frames.py"), str(args.video_path), str(event_manifest_path), str(frame_dir)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    event_manifest = json.loads(event_manifest_path.read_text(encoding="utf-8"))
     probe = json.loads(args.probe.read_text(encoding="utf-8"))
-    event_manifest["intervals"] = normalize_event_intervals(
-        event_manifest["intervals"],
-        probe["duration_seconds"],
-    )
-    event_manifest_path.write_text(
-        json.dumps(event_manifest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    event_manifest, extracted_frames = run_evidence_extraction(
+        args.video_path,
+        probe,
+        output_dir,
+        video_learning_scripts,
     )
     intervals = [
         {"id": f"shot-{index:03d}", "start": item["start"], "end": item["end"]}
@@ -186,7 +202,7 @@ if __name__ == "__main__":
             "timestamp": item["time"],
             "path": item["path"],
         }
-        for item in json.loads(extracted.stdout)
+        for item in extracted_frames
     ]
     manifest = build_manifest(
         args.video_path,

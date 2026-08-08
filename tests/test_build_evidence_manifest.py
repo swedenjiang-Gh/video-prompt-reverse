@@ -5,6 +5,7 @@ import pytest
 from scripts.build_evidence_manifest import (
     build_manifest,
     normalize_event_intervals,
+    run_evidence_extraction,
     validate_manifest,
 )
 
@@ -139,3 +140,42 @@ def test_validate_manifest_requires_entry_peak_exit_in_order():
 
     with pytest.raises(ValueError, match="entry, peak, and exit"):
         validate_manifest(malformed)
+
+
+def test_run_evidence_extraction_clamps_manifest_before_frame_extraction(tmp_path):
+    """Moving normalization after extraction makes the extractor emit timestamp 11.0."""
+    scripts = tmp_path / "video-learning"
+    scripts.mkdir()
+    (scripts / "scan_events.py").write_text(
+        """import json
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[sys.argv.index('--output') + 1])
+output.write_text(json.dumps({'intervals': [{'start': 8.0, 'peak': 9.5, 'end': 11.0}]}), encoding='utf-8')
+""",
+        encoding="utf-8",
+    )
+    (scripts / "extract_event_frames.py").write_text(
+        """import json
+import sys
+from pathlib import Path
+
+events = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))['intervals']
+print(json.dumps([{'event_id': 'event-001', 'role': 'end', 'time': events[0]['end'], 'path': 'frames/exit.jpg'}]))
+""",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    _, frames = run_evidence_extraction(
+        Path("input/clip.mp4"),
+        {"duration_seconds": 10.0},
+        output_dir,
+        scripts,
+    )
+
+    assert frames == [
+        {"event_id": "event-001", "role": "end", "time": 10.0, "path": "frames/exit.jpg"}
+    ]
