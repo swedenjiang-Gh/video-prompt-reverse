@@ -9,7 +9,7 @@ from pathlib import Path
 
 DEFAULT_SKYCAPTIONER_ROOT = Path("D:/CodexVideoLearning/vision/skycaptioner")
 DEFAULT_QWEN_ROOT = DEFAULT_SKYCAPTIONER_ROOT / "models" / "Qwen2.5-32B-Instruct-GGUF"
-DEFAULT_LLAMA_EXECUTABLE = Path("D:/CodexVideoLearning/llama.cpp/llama-cli.exe")
+DEFAULT_LLAMA_EXECUTABLE = Path("D:/CodexVideoLearning/vision/runtime/llama-cli.exe")
 QWEN_SHARDS = tuple(
     f"qwen2.5-32b-instruct-q4_k_m-{index:05d}-of-00005.gguf"
     for index in range(1, 6)

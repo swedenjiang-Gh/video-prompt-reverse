@@ -144,6 +144,7 @@ def build_llama_arguments(llama_executable: str, model_path: str) -> list[str]:
         "--temp",
         "0",
         "--no-display-prompt",
+        "--single-turn",
     ]
 
 

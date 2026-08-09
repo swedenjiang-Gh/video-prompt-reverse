@@ -25,11 +25,23 @@ The Skill must retain the baseline's evidence and uncertainty discipline while p
 ## Deterministic unit and contract status
 
 - Task 2: evidence-manifest construction, schema validation, event bounding, and extraction ordering pass 6 focused tests.
-- Task 3: read-only runtime health and static PE/CUDA evidence checks pass 12 focused tests. This is static health only.
+- Task 3: read-only runtime health and static PE/CUDA evidence checks pass 13 focused tests. This is static health only.
 - Task 4: SkyCaptioner request/response contracts, frame budgeting, batching, dry-run behavior, and injected execution pass 7 focused tests. No real model was loaded.
 - Task 5: four-source fusion and strict prompt-package validation pass 106 focused tests; the repository's post-Task-5 full suite passes 131 tests.
 
-These results establish deterministic unit and contract behavior only. Fresh-agent Skill behavior is a Task 6 controller gate. Real SkyCaptioner/Qwen execution and MiniMax H3 or other generation acceptance remain pending Tasks 7 and 8; executable smoke, visual similarity, and production quality are not yet proven.
+These results establish deterministic unit and contract behavior only. Fresh-agent Skill behavior is a Task 6 controller gate. Task 7 below records real SkyCaptioner/Qwen execution. MiniMax H3 generation, rendered visual similarity, and production quality remain Task 8 gates.
+
+## Task 7 local-runtime acceptance
+
+- PASS: the official SkyCaptioner payload contains seven indexed safetensors shards and all index-declared files; the verified payload is 31,827,208,372 bytes.
+- PASS: the Qwen2.5-32B-Instruct GGUF directory contains all five Q4_K_M shards; the verified payload is 19,851,336,384 bytes and llama.cpp discovered the continuation shards from shard 1.
+- PASS: the D-drive Python 3.11.15 environment imports PyTorch 2.7.1+cu128, TorchVision 0.22.1+cu128, Transformers 4.51.3, Accelerate 1.7.0, Safetensors 0.5.3, and bitsandbytes 0.46.1.
+- PASS: PyTorch reported CUDA available on an NVIDIA GeForce RTX 4090 and completed a CUDA tensor operation.
+- PASS: the official SkyCaptioner model loaded as `Qwen2_5_VLForConditionalGeneration` using 4-bit NF4 and FP16 compute on `cuda:0`; observed model footprint was about 5.39 GiB.
+- PASS: an independently launched Qwen2.5-32B llama.cpp smoke returned exactly `QWEN_SMOKE_OK`, recorded `exit_code=0`, printed `Exiting...`, and left no `llama-cli` process behind.
+- FIXED: the first smoke returned the correct text but remained in auto-enabled conversation mode. The fusion argument contract now requires `--single-turn`; the regression test failed before the fix and passes after it.
+
+This proves complete local payloads, CUDA execution, SkyCaptioner model loading, and a one-turn 32B fusion executable smoke. It does not yet prove the full video evidence-to-prompt package, target-engine generation, visual similarity, or production quality; those remain Task 8.
 
 ## Task 6 forward-test round 1
 

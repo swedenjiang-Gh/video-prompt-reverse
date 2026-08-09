@@ -1,7 +1,14 @@
 import sys
 from pathlib import Path
 
-from scripts.check_runtime import QWEN_SHARDS, check_runtime
+from scripts.check_runtime import DEFAULT_LLAMA_EXECUTABLE, QWEN_SHARDS, check_runtime
+
+
+def test_default_llama_executable_matches_the_installed_runtime():
+    """The default health check must target the workstation's real llama.cpp runtime."""
+    assert DEFAULT_LLAMA_EXECUTABLE == Path(
+        "D:/CodexVideoLearning/vision/runtime/llama-cli.exe"
+    )
 
 
 def _minimal_pe_magic() -> bytes:

@@ -258,6 +258,7 @@ def test_fuse_uses_injected_runner_with_argument_array_then_validates_output(cap
         "--temp",
         "0",
         "--no-display-prompt",
+        "--single-turn",
     ]
     assert isinstance(seen[0][0], list)
     assert "SOURCE_INPUTS_JSON" in seen[0][1]
@@ -337,6 +338,7 @@ def test_prepare_dry_run_builds_the_request_without_runner_or_private_paths():
         "--temp",
         "0",
         "--no-display-prompt",
+        "--single-turn",
     ]
     assert "OUTPUT_CONTRACT_JSON" in result["instruction"]
 
