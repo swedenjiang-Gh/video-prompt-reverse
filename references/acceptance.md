@@ -21,3 +21,12 @@ The control also conflates source reconstruction requirements with generation-st
 ## Acceptance implication
 
 The Skill must retain the baseline's evidence and uncertainty discipline while producing the omitted structured review, variant, source-separation, and validation fields.
+
+## Deterministic unit and contract status
+
+- Task 2: evidence-manifest construction, schema validation, event bounding, and extraction ordering pass 6 focused tests.
+- Task 3: read-only runtime health and static PE/CUDA evidence checks pass 12 focused tests. This is static health only.
+- Task 4: SkyCaptioner request/response contracts, frame budgeting, batching, dry-run behavior, and injected execution pass 7 focused tests. No real model was loaded.
+- Task 5: four-source fusion and strict prompt-package validation pass 106 focused tests; the repository's post-Task-5 full suite passes 131 tests.
+
+These results establish deterministic unit and contract behavior only. Fresh-agent Skill behavior is a Task 6 controller gate. Real SkyCaptioner/Qwen execution and MiniMax H3 or other generation acceptance remain pending Tasks 7 and 8; executable smoke, visual similarity, and production quality are not yet proven.
