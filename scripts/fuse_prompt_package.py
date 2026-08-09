@@ -2,6 +2,7 @@
 
 import argparse
 import subprocess
+import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -134,7 +135,7 @@ def extract_strict_json_object(raw_output: str) -> dict:
 
 
 def build_llama_arguments(llama_executable: str, model_path: str) -> list[str]:
-    """Return a structured llama.cpp argument vector; the prompt is sent on stdin."""
+    """Return a structured llama.cpp argument vector; the runner adds a prompt file."""
     return [
         llama_executable,
         "-m",
@@ -143,7 +144,10 @@ def build_llama_arguments(llama_executable: str, model_path: str) -> list[str]:
         "32768",
         "--temp",
         "0",
+        "--log-disable",
+        "--no-show-timings",
         "--no-display-prompt",
+        "--simple-io",
         "--single-turn",
     ]
 
@@ -156,14 +160,23 @@ def _default_runner(arguments: list[str], prompt: str) -> str:
         raise ValueError("llama executable must be an existing local file")
     if not model.is_absolute() or not model.is_file():
         raise ValueError("llama model must be an existing local file")
-    completed = subprocess.run(
-        arguments,
-        input=prompt,
-        capture_output=True,
-        text=True,
-        shell=False,
-        check=False,
-    )
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", newline="\n", suffix=".txt", delete=False
+    ) as prompt_file:
+        prompt_file.write(prompt)
+        prompt_path = Path(prompt_file.name)
+    try:
+        completed = subprocess.run(
+            [*arguments, "--file", str(prompt_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="strict",
+            shell=False,
+            check=False,
+        )
+    finally:
+        prompt_path.unlink(missing_ok=True)
     if completed.returncode != 0:
         raise RuntimeError("local llama.cpp fusion failed")
     return completed.stdout

@@ -34,8 +34,10 @@ def test_build_structural_prompt_limits_the_model_to_structural_evidence():
     assert "peak @ 5.0s: frames/peak.jpg" in prompt
     assert "exit @ 6.0s: frames/exit.jpg" in prompt
     assert "shot_type" in prompt
+    assert '"subjects"' in prompt
+    assert '"shot_angle"' in prompt
+    assert '"shot_position"' in prompt
     assert "camera_motion" in prompt
-    assert "confidence_note" in prompt
     assert "uncertain" in prompt
     assert "ASR" not in prompt
 
@@ -44,13 +46,20 @@ def test_parse_model_response_preserves_the_source_shot_id_and_uncertainty():
     """Replacing the source id or dropping an explicit uncertainty note must break this test."""
     raw_response = json.dumps(
         {
-            "shot_id": "scene-A:take_001",
-            "shot_type": "dialogue",
-            "shot_size": "medium",
-            "angle": "eye-level",
-            "camera_position": "front",
+            "subjects": [
+                {
+                    "appearance": "a woman in a black suit",
+                    "action": "stands at a table",
+                    "expression": "neutral",
+                    "position": "center",
+                    "TYPES": {"type": "Human", "sub_type": "Woman"},
+                    "is_main_subject": True,
+                }
+            ],
+            "shot_type": "medium_shot",
+            "shot_angle": "eye_level",
+            "shot_position": "front_view",
             "camera_motion": "uncertain",
-            "expression": "neutral",
             "environment": "interior",
             "lighting": "soft",
             "confidence_note": "uncertain: camera movement is not visible in the sampled frames",
@@ -60,6 +69,10 @@ def test_parse_model_response_preserves_the_source_shot_id_and_uncertainty():
     record = parse_model_response(raw_response, "scene-A:take_001")
 
     assert record["shot_id"] == "scene-A:take_001"
+    assert record["shot_size"] == "medium_shot"
+    assert record["angle"] == "eye_level"
+    assert record["camera_position"] == "front_view"
+    assert record["expression"] == "neutral"
     assert record["camera_motion"] == "uncertain"
     assert record["confidence_note"] == "uncertain: camera movement is not visible in the sampled frames"
 
@@ -68,13 +81,11 @@ def test_parse_model_response_rejects_malformed_or_incomplete_output():
     """Accepting a missing required structural field would hide unsupported inference."""
     malformed = json.dumps(
         {
-            "shot_id": "shot-1",
+            "subjects": [],
             "shot_type": "action",
-            "shot_size": "wide",
-            "angle": "eye-level",
-            "camera_position": "front",
+            "shot_angle": "eye-level",
+            "shot_position": "front",
             "camera_motion": "static",
-            "expression": "focused",
             "environment": "street",
         }
     )
@@ -84,6 +95,26 @@ def test_parse_model_response_rejects_malformed_or_incomplete_output():
 
     with pytest.raises(ValueError, match="valid JSON object"):
         parse_model_response("not json", "shot-1")
+
+
+def test_parse_model_response_preserves_official_empty_fields_as_uncertain():
+    """The official model may emit empty optional strings; they must not abort a batch."""
+    raw_response = json.dumps(
+        {
+            "subjects": [],
+            "shot_type": "full_shot",
+            "shot_angle": "eye_level",
+            "shot_position": "front_view",
+            "camera_motion": "",
+            "environment": "casino",
+            "lighting": "",
+        }
+    )
+
+    record = parse_model_response(raw_response, "shot-1")
+
+    assert record["camera_motion"] == "uncertain"
+    assert record["lighting"] == "uncertain"
 
 
 def test_prepare_dry_run_is_deterministic_and_timestamp_ordered_without_a_backend():
@@ -140,13 +171,20 @@ def test_prepare_dry_run_applies_frame_budget_once_to_evidence_and_prompt():
 def _raw_response(shot_id):
     return json.dumps(
         {
-            "shot_id": shot_id,
-            "shot_type": "action",
-            "shot_size": "wide",
-            "angle": "low",
-            "camera_position": "side",
+            "subjects": [
+                {
+                    "appearance": "a runner",
+                    "action": "runs",
+                    "expression": "determined",
+                    "position": "center",
+                    "TYPES": {"type": "Human", "sub_type": "Runner"},
+                    "is_main_subject": True,
+                }
+            ],
+            "shot_type": "full_shot",
+            "shot_angle": "low_angle",
+            "shot_position": "side_view",
             "camera_motion": "tracking",
-            "expression": "determined",
             "environment": "exterior",
             "lighting": "daylight",
         }
@@ -230,9 +268,12 @@ def test_transformers_backend_uses_qwen_chat_template_and_decodes_only_new_token
             self.decoded.append((generated, skip_special_tokens))
             return ["response-one", "response-two"]
 
+    model_loads = []
+    quantization_configs = []
+
     class FakeModel:
         def to(self, device):
-            return self
+            raise AssertionError("a 4-bit CUDA model must not be moved with .to()")
 
         def eval(self):
             return self
@@ -248,7 +289,14 @@ def test_transformers_backend_uses_qwen_chat_template_and_decodes_only_new_token
         "transformers",
         SimpleNamespace(
             AutoProcessor=SimpleNamespace(from_pretrained=lambda *args, **kwargs: processor),
-            AutoModelForVision2Seq=SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
+            AutoModelForVision2Seq=SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: (
+                    model_loads.append((args, kwargs)) or FakeModel()
+                )
+            ),
+            BitsAndBytesConfig=lambda **kwargs: (
+                quantization_configs.append(kwargs) or {"quantization": kwargs}
+            ),
         ),
     )
     model_path = tmp_path / "SkyCaptioner-V1"
@@ -263,6 +311,18 @@ def test_transformers_backend_uses_qwen_chat_template_and_decodes_only_new_token
     )
 
     assert responses == ["response-one", "response-two"]
+    assert quantization_configs == [
+        {
+            "load_in_4bit": True,
+            "bnb_4bit_quant_type": "nf4",
+            "bnb_4bit_compute_dtype": "fp16",
+            "bnb_4bit_use_double_quant": True,
+        }
+    ]
+    assert model_loads[0][1]["device_map"] == {"": "cuda"}
+    assert model_loads[0][1]["quantization_config"] == {
+        "quantization": quantization_configs[0]
+    }
     assert [call[1] for call in processor.chat_messages] == [False, False]
     assert [call[2] for call in processor.chat_messages] == [True, True]
     assert [[item["type"] for item in call[0][0]["content"]] for call in processor.chat_messages] == [

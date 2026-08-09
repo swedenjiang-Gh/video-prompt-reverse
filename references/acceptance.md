@@ -194,3 +194,20 @@ The authorized no-model/no-validator fresh-agent rerun recorded these portable r
 - NOT EVALUATED: strict JSON, model, shipped-validator, engine compatibility, generation, similarity, and production-quality execution remain Task 8 gates.
 
 Round 11 is partial/FAIL on the single exhaustive source-closure gate. Draft from the four streams, then atomize the final six prompts and build the inventory backward from every final occurrence. Claim `source-closed` only when prompt atoms and rows form a bidirectional one-atom mapping; otherwise report `attribution incomplete` and `partial`. The passing I2V asset rule remains unchanged.
+
+## Task 8 real-video and MiniMax H3 acceptance
+
+- Source: authorized 25.680998-second MiniMax H3 Douyin example, analyzed locally without copying source media into the repository.
+- PASS: FFmpeg scene-change refinement produced 8 event intervals and 24 entry/peak/exit evidence frames after the coarse event scan over-merged the fast montage.
+- PASS: SkyCaptioner-V1 loaded with 4-bit NF4 on CUDA and completed 8/8 structural records. Four source namespaces remained separate: SkyCaptioner 8, controller/general-VLM 8, ASR/OCR 6, and human context 1.
+- PASS: Qwen2.5-32B Q4_K_M consumed the real instruction through `--file` and produced a complete JSON-shaped diagnostic draft. The earlier stdin attempt had instead answered an unrelated empty-prompt task.
+- PARTIAL: automatic strict package delivery did not pass. Current `llama-cli` stdout mixed its startup banner, truncated prompt echo, Markdown-fenced completion, and exit marker; the strict one-object parser correctly rejected it. A subsequent generic JSON-constraint experiment also failed the verified wrapper boundary and was not retained. Do not call the package validated or source-closed.
+- PASS: the existing `minimax-h3-t2v` workflow was reused for shot 007; no redundant Canvas/API library pair was created. The task API ran at 832×480, 73 frames, 24 fps, 25 steps, TeaCache 0.15, seed 12345 and returned H.264 plus AAC stereo 32 kHz in 112.025 seconds.
+- PASS, prompt correctness: the result contains the main requested semantics—red casino hall, centered long white-haired woman in black formal clothing, raised card, flying cards, large brimmed-hat man in the right foreground, red tie, tables, and chips.
+- PARTIAL, rendered similarity: the result keeps the graphic-anime/casino concept but uses continuous perspective instead of the exact source layer/split layout; cyan skin highlights drift from the strict palette; the woman wears trousers instead of a skirt; the man's face is visible rather than fully shadowed; the source red-to-white exit is absent.
+- PASS, one-clip motion/continuity only: the card rises, cards move, and the foreground hand changes from holding chips to pressing the stack. This does not prove long-shot, adjacent-shot, or batch continuity.
+- PARTIAL, audio: AAC is present but very quiet (mean -43.9 dB, max -19.1 dB). Source audio type remained unresolved, so generated sound was labelled as a creative validation choice; no production audio-quality claim.
+
+Overall Task 8 status is `partial`: real structural analysis and the local H3 loop ran end to end, while automatic strict prompt-package delivery and production visual/audio quality remain open. Evidence and outputs stay under the private task directory and are not committed.
+
+Post-Task-8 deterministic verification: 133 repository tests pass, the Skill validator passes, and `git diff --check` is clean.

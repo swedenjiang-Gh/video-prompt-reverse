@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -257,7 +258,10 @@ def test_fuse_uses_injected_runner_with_argument_array_then_validates_output(cap
         "32768",
         "--temp",
         "0",
+        "--log-disable",
+        "--no-show-timings",
         "--no-display-prompt",
+        "--simple-io",
         "--single-turn",
     ]
     assert isinstance(seen[0][0], list)
@@ -337,7 +341,10 @@ def test_prepare_dry_run_builds_the_request_without_runner_or_private_paths():
         "32768",
         "--temp",
         "0",
+        "--log-disable",
+        "--no-show-timings",
         "--no-display-prompt",
+        "--simple-io",
         "--single-turn",
     ]
     assert "OUTPUT_CONTRACT_JSON" in result["instruction"]
@@ -390,10 +397,10 @@ def test_instruction_serialization_rejects_non_finite_source_values():
         )
 
 
-def test_default_runner_passes_an_argument_array_and_prompt_stdin_without_shell(
+def test_default_runner_passes_an_argument_array_and_prompt_file_without_shell(
     tmp_path, monkeypatch, capsys
 ):
-    """Using a command string, shell interpolation, or logging runtime values must break this test."""
+    """Using stdin, a command string, shell interpolation, or leaked runtime values must fail."""
     executable = tmp_path / "private llama" / "llama-cli.exe"
     executable.parent.mkdir()
     executable.write_bytes(b"local executable placeholder")
@@ -402,12 +409,16 @@ def test_default_runner_passes_an_argument_array_and_prompt_stdin_without_shell(
     model.write_bytes(b"local model placeholder")
     arguments = [str(executable), "-m", str(model), "--temp", "0"]
     calls = []
+    prompt_paths = []
 
     class Completed:
         returncode = 0
         stdout = '{"ok":true}'
 
     def fake_run(received_arguments, **kwargs):
+        prompt_path = Path(received_arguments[received_arguments.index("--file") + 1])
+        prompt_paths.append(prompt_path)
+        assert prompt_path.read_text(encoding="utf-8") == "private prompt"
         calls.append((received_arguments, kwargs))
         return Completed()
 
@@ -416,16 +427,18 @@ def test_default_runner_passes_an_argument_array_and_prompt_stdin_without_shell(
     assert _default_runner(arguments, "private prompt") == '{"ok":true}'
     assert calls == [
         (
-            arguments,
+            [*arguments, "--file", str(prompt_paths[0])],
             {
-                "input": "private prompt",
                 "capture_output": True,
                 "text": True,
+                "encoding": "utf-8",
+                "errors": "strict",
                 "shell": False,
                 "check": False,
             },
         )
     ]
+    assert prompt_paths[0].exists() is False
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
@@ -482,7 +495,7 @@ def test_prepare_allows_legitimate_token_count_metadata():
         (
             {
                 "media": {
-                    "video_path": "C:/Users/J/private/reference.mp4",
+                    "video_path": "C:/Users/ExampleUser/private/reference.mp4",
                     "duration_seconds": 1.0,
                 },
                 "shots": [],
@@ -518,7 +531,7 @@ def test_prepare_rejects_private_roots_and_common_credentials_before_instruction
     ("mode", "generated_at", "message"),
     [
         ("api_key=credential-shaped-mode", "2026-08-09T10:00:00Z", "secret-like value"),
-        ("reconstruction", "C:/Users/J/private/generated-at", "private path"),
+        ("reconstruction", "C:/Users/ExampleUser/private/generated-at", "private path"),
     ],
 )
 def test_prepare_rejects_sensitive_metadata_before_building_instruction(
@@ -549,7 +562,7 @@ def test_prepare_rejects_sensitive_metadata_before_building_instruction(
     ("mode", "generated_at", "message"),
     [
         ("api_key=credential-shaped-mode", "2026-08-09T10:00:00Z", "secret-like value"),
-        ("reconstruction", "C:/Users/J/private/generated-at", "private path"),
+        ("reconstruction", "C:/Users/ExampleUser/private/generated-at", "private path"),
     ],
 )
 def test_fuse_rejects_sensitive_metadata_before_calling_runner(

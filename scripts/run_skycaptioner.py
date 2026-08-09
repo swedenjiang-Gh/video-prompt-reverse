@@ -23,6 +23,35 @@ STRUCTURAL_FIELDS = (
     "lighting",
 )
 
+MODEL_FIELDS = (
+    "subjects",
+    "shot_type",
+    "shot_angle",
+    "shot_position",
+    "camera_motion",
+    "environment",
+    "lighting",
+)
+
+MODEL_SCHEMA = {
+    "subjects": [
+        {
+            "appearance": "Main subject appearance description",
+            "action": "Main subject action",
+            "expression": "Main subject expression, empty when not applicable",
+            "position": "Subject position in the video",
+            "TYPES": {"type": "Main category", "sub_type": "Sub-category"},
+            "is_main_subject": True,
+        }
+    ],
+    "shot_type": "long_shot/full_shot/medium_shot/close_up/extreme_close_up/other",
+    "shot_angle": "eye_level/high_angle/low_angle/other",
+    "shot_position": "front_view/back_view/side_view/over_the_shoulder/overhead_view/point_of_view/aerial_view/overlooking_view/other",
+    "camera_motion": "Camera movement description",
+    "environment": "Video background/environment description",
+    "lighting": "Lighting information in the video",
+}
+
 
 def _ordered_shots(manifest: dict) -> list[dict]:
     shots = manifest.get("shots")
@@ -63,14 +92,14 @@ def build_structural_prompt(shot: dict) -> str:
             raise ValueError("each evidence reference requires role, timestamp, and path") from None
         references.append(f"- {role} @ {timestamp}s: {path}")
 
-    fields = ", ".join(f'"{field}"' for field in STRUCTURAL_FIELDS)
     return "\n".join(
         (
-            "Analyze only the supplied visual evidence for this one shot.",
+            "Generate a structured and detailed caption for the supplied visual evidence.",
             f"Source shot id: {shot_id}",
-            "Return one JSON object with exactly these required string fields: " + fields + ".",
-            "You may add a string confidence_note. If any detail is not observable, use "
-            '"uncertain" for that field and explain why in confidence_note.',
+            "Return one bare JSON object matching this schema:",
+            json.dumps(MODEL_SCHEMA, ensure_ascii=False, separators=(",", ":")),
+            "Do not add Markdown fences, commentary, or fields outside that JSON object.",
+            "If a detail is not observable, use the string \"uncertain\" for that field.",
             "Do not infer dialogue, OCR text, audio, or human context.",
             "Evidence references:",
             *references,
@@ -79,26 +108,46 @@ def build_structural_prompt(shot: dict) -> str:
 
 
 def parse_model_response(raw_response: str, source_shot_id: str) -> dict:
-    """Validate one model response without filling in absent structural values."""
+    """Validate the official structural shape and map it to the public record."""
     try:
         parsed = json.loads(raw_response)
     except (TypeError, json.JSONDecodeError):
         raise ValueError("model response must be a valid JSON object") from None
     if not isinstance(parsed, dict):
         raise ValueError("model response must be a valid JSON object")
-    for field in STRUCTURAL_FIELDS:
+    for field in MODEL_FIELDS:
         if field not in parsed:
             raise ValueError(f"model response missing required field: {field}")
-        if not isinstance(parsed[field], str) or not parsed[field].strip():
-            raise ValueError(f"model response field must be a non-empty string: {field}")
-    if parsed["shot_id"] != source_shot_id:
-        raise ValueError("model response shot_id must match the source shot id")
+    if not isinstance(parsed["subjects"], list):
+        raise ValueError("model response subjects must be a list")
+    for field in MODEL_FIELDS[1:]:
+        if not isinstance(parsed[field], str):
+            raise ValueError(f"model response field must be a string: {field}")
+    normalized = {
+        field: parsed[field].strip() or "uncertain" for field in MODEL_FIELDS[1:]
+    }
     if "confidence_note" in parsed and (
         not isinstance(parsed["confidence_note"], str) or not parsed["confidence_note"].strip()
     ):
         raise ValueError("model response confidence_note must be a non-empty string")
 
-    result = {field: parsed[field] for field in STRUCTURAL_FIELDS}
+    expressions = [
+        subject.get("expression", "").strip()
+        for subject in parsed["subjects"]
+        if isinstance(subject, dict) and isinstance(subject.get("expression"), str)
+        and subject.get("expression", "").strip()
+    ]
+    result = {
+        "shot_id": source_shot_id,
+        "shot_type": normalized["shot_type"],
+        "shot_size": normalized["shot_type"],
+        "angle": normalized["shot_angle"],
+        "camera_position": normalized["shot_position"],
+        "camera_motion": normalized["camera_motion"],
+        "expression": "; ".join(expressions) or "not_applicable",
+        "environment": normalized["environment"],
+        "lighting": normalized["lighting"],
+    }
     if "confidence_note" in parsed:
         result["confidence_note"] = parsed["confidence_note"]
     return result
@@ -143,16 +192,30 @@ def _load_transformers_backend(model_path: str, device: str) -> Callable[[list[d
 
     import torch
     from PIL import Image
-    from transformers import AutoModelForVision2Seq, AutoProcessor
+    from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig
 
-    torch_dtype = torch.float16 if device.startswith("cuda") else torch.float32
     processor = AutoProcessor.from_pretrained(local_model, local_files_only=True, trust_remote_code=True)
-    model = AutoModelForVision2Seq.from_pretrained(
-        local_model,
-        local_files_only=True,
-        torch_dtype=torch_dtype,
-        trust_remote_code=True,
-    ).to(device)
+    model_options = {
+        "local_files_only": True,
+        "trust_remote_code": True,
+    }
+    if device.startswith("cuda"):
+        model_options.update(
+            {
+                "device_map": {"": device},
+                "quantization_config": BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                ),
+            }
+        )
+    else:
+        model_options["torch_dtype"] = torch.float32
+    model = AutoModelForVision2Seq.from_pretrained(local_model, **model_options)
+    if not device.startswith("cuda"):
+        model = model.to(device)
     model.eval()
 
     def caption(requests: list[dict]) -> list[str]:

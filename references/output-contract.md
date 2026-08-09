@@ -47,10 +47,12 @@ cross-field invariants.
 One recursive gate runs before instruction construction, dry-run output, or runner invocation and
 again on the fused package. It rejects semantic credential keys and common credential values,
 including `github_pat_...`, plus absolute/private roots; harmless metadata such as `token_count`
-is allowed. The llama.cpp adapter passes an argument list directly to `subprocess.run` with the
-prompt on stdin; it does not use a shell or print the prompt, executable path, model path, stdout,
-or stderr. An injected runner is used by tests. Dry-run builds the deterministic request and a
-redacted argument template without process startup.
+is allowed. The llama.cpp adapter writes the prompt to one UTF-8 temporary file and passes its path
+through the verified `--file` argument in a structured argument list and removes the file in a
+`finally` path. It does not use stdin for the initial chat prompt, a shell, or print the prompt,
+executable path, model path, stdout, or stderr. An injected runner is used by tests. Dry-run builds
+the deterministic request and a redacted argument template without process startup. The strict
+one-object parser intentionally rejects any CLI banner, prompt echo, Markdown fence, or exit marker.
 
 ## Markdown
 
