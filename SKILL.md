@@ -17,11 +17,11 @@ Never submit a local or cloud generation task silently.
 2. Ask `video-learning` to produce media facts and an event-driven evidence manifest. Use entry, peak, and exit evidence for every event interval.
 3. If no usable event intervals exist, declare a fixed-interval fallback before extraction and carry it into uncertainties. Treat frames as sampled states, not continuous-motion proof.
 4. Run the SkyCaptioner structural pass. Keep visual-only observations and raw responses auditable.
-5. Assemble `skycaptioner`, `general_vlm`, `asr_ocr`, and `human_context` separately. Preserve empty streams; never move observations across namespaces. Label frame observations made by the current controller or agent as `controller/general-VLM observations` in `general_vlm`. Use `human_context` only for an explicitly identified human record, such as user-provided authorization or story context; never call an agent/model observation human.
+5. Assemble `skycaptioner`, `general_vlm`, `asr_ocr`, and `human_context` separately. Preserve empty streams; never move observations across namespaces. Label frame observations made by the current controller or agent as `controller/general-VLM observations` in `general_vlm`. Use `human_context` only for an explicitly identified human record, such as user-provided authorization or story context; never call an agent/model observation human. Before a visual identity, accessory, garment, prop attribute, pose, or state enters a prompt, record it in one named source stream with an evidence reference; otherwise omit it.
 6. Fuse with the existing 32B interface. Produce the five-role review, T2V/I2V reconstructions, enhanced prompt, and three complete single-variable variants.
 7. Validate strictly against the manifest, required sources, metadata, and target engine. Fix rejected data at its source.
 8. Deliver validated JSON and its derived Markdown. Keep source-fidelity and generation-stability negatives separate; retain uncertainties.
-9. Offer the user a generation route: MiniMax H3, Wan/local, Seedance/cloud, another engine, or no generation. Treat local-versus-cloud and H3-versus-Wan as user choices.
+9. End every delivery with an explicit five-option offer: MiniMax H3, Wan/local, Seedance/cloud, another engine, or no generation. Do not merely say the user must choose, and never execute an option without the user's selection. Treat local-versus-cloud and H3-versus-Wan as user choices.
 
 Print every single-variable variant as a complete standalone prompt with all eight canonical sections in order. Copy the seven unchanged sections in full from `reconstruction_t2v`; change exactly the section mapped by `changed_dimension`. Never deliver a replacement line, ellipsis, baseline reference, `same as above`, or `other sections unchanged` shorthand.
 
@@ -29,13 +29,21 @@ Before writing any complete prompt, read [canonical prompt section ownership](re
 
 Before cloning variants, rewrite `reconstruction_t2v` until every clause has exactly one owner. If changing another dimension could make a clause false, move it to that dimension's section. Reject a variant if any unchanged section restates or requires the changed action, camera, lighting, or timing.
 
+Entity names may recur across sections as grammatical references, but each attribute, state, location, or action meaning has one owner. `SCENE` owns prop attributes and static layout, for example `an open tan book between the subjects`; `ACTION` then says only how a subject interacts with `the book`, without repeating its color, open/closed state, or location. `CONSTRAINTS` contains only a genuine invariant or negative not already stated in `SUBJECT`, `ACTION`, `SCENE`, `CAMERA`, `LIGHTING`, or `TIMING`.
+
 Build reconstruction `AUDIO` only from resolved audio evidence. When source audio is unresolved, keep it unresolved with an action-independent boundary such as `source audio unresolved; no verified dialogue, music, ambience, or synchronized effects`. Clone that boundary unchanged into variants. If an action change also needs a synchronized sound, classify it as an `AUDIO` change or a separate creative prompt, not an `ACTION`-only variant.
 
 When reconstruction uses fixed-interval frames or empty event intervals, write only observed endpoint framing in `CAMERA` and supported duration or pacing in `TIMING`. If generation needs an interpolated bridge, label it inside the owning section: `conservative inferred reconstruction choice; exact camera mechanism unresolved` in `CAMERA`, and `conservative inferred reconstruction choice; cuts/transitions unresolved` in `TIMING`. An external uncertainty list does not turn an unlabelled continuous move or no-cut instruction into source evidence.
 
+Under the same fixed-frame boundary, `ACTION` may state sampled poses or states only. Label any connecting change such as gaze alternation, sustained behavior, or response inside `ACTION` as `conservative inferred reconstruction choice; exact action path unresolved`. Label a pacing choice that connects samples inside `TIMING` as conservative too.
+
 Keep epistemic clauses owner-local. Put camera mechanism, lens, focus, or camera-motion uncertainty and prohibitions in `CAMERA`; put shot-count, single-take, no-cut, cut, transition, or editing uncertainty and prohibitions in `TIMING`. Delete these clauses from `CONSTRAINTS` before cloning variants so every unchanged section remains neutral toward a changed `CAMERA` or `TIMING` choice.
 
 Put every cut, edit, transition, shot-count, or single-take clause—including a prohibition such as no cuts—only in `TIMING`, never in `CAMERA`. Put every readable-text prohibition only in `CONSTRAINTS`, never in `SCENE`; `SCENE` may name a book or page as a prop without assigning its text a legibility rule. Remove the original clause after moving it so no ownership duplicate remains.
+
+Keep the seven unchanged sections neutral for a `LIGHTING` variant. Remove `warm`, `cool`, `night`, `day`, `bright`, `dim`, and other illumination or tone states from `SCENE` and `CONSTRAINTS`; put them only in `LIGHTING`.
+
+Keep top-level negative categories semantically separate. For text-related entries, `reconstruction_source` prohibits inventing specific verifiable body text, titles, or illustrations; `generation_stability` addresses malformed pseudo-glyphs, glyph flicker, or page-text texture instability without repeating a readable/unreadable-text fidelity rule.
 
 Write enhanced `ACTION` as affirmative event behavior. Put every non-occlusion requirement, including not obscuring eyes, faces, or hands, only in `CONSTRAINTS`; remove it from `ACTION`.
 

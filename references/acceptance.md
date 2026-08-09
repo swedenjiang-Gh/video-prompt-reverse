@@ -145,3 +145,18 @@ The authorized fresh-agent rerun recorded these portable results:
 - PASS: no model-backed fusion, strict JSON validation, generation, rendered similarity, or production-quality result was claimed.
 
 Round 8 is partial/FAIL and does not pass the exact-ownership or seven-section compatibility gates. `SCENE` must use static prop/layout wording, camera/edit epistemic clauses must remain inside `CAMERA`/`TIMING`, and source observations must identify their actual producer. A new independent fresh-agent rerun must demonstrate all three behaviors before Task 6 can pass.
+
+## Task 6 forward-test round 9
+
+The authorized no-model/no-validator fresh-agent rerun recorded these portable results:
+
+- PASS: orchestrator entry, authorization, four attributed source streams, fixed-frame evidence boundaries, five-role review, complete eight-section prompts/variants, unresolved audio, owner-local camera/edit uncertainty, enhanced non-occlusion ownership, and proof-level boundaries remained explicit.
+- NOT EVALUATED: strict JSON construction and shipped-validator execution were intentionally outside this partial forward-test. Their absence is not a Task 6 behavior failure and must not be filled with fabricated JSON; executable validation remains a Task 8 gate.
+- FAIL: prompts introduced identity/accessory facts absent from every source stream and described fixed-frame action transitions without an inline conservative-inference label.
+- FAIL: entity attributes, states, locations, and interactions were repeated across `SUBJECT`/`ACTION`/`SCENE`/`CONSTRAINTS` instead of assigning each semantic payload to one owner.
+- FAIL: unchanged `SCENE` and `CONSTRAINTS` retained warm-light/tone semantics that constrained the `LIGHTING` variant.
+- FAIL: `generation_stability` repeated the readable-text fidelity rule instead of limiting itself to pseudo-glyph and text-texture instability.
+- CONCERN: the result said the user must choose a route but did not actually offer MiniMax H3, Wan/local, Seedance/cloud, another engine, and no generation.
+- PASS: no model, validator, generation, rendered similarity, or production-quality result was claimed.
+
+Round 9 is partial/FAIL. Prompt facts must be admitted through a named source, fixed-frame action bridges must be qualified inside `ACTION`, semantic payload must have one owner, unchanged sections must be lighting-neutral, negative categories must remain disjoint, and the five generation-route choices must be offered without execution. A new independent fresh-agent rerun must demonstrate these behaviors before Task 6 can pass.
