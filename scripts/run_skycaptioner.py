@@ -114,14 +114,17 @@ def prepare_dry_run(
 ) -> dict:
     """Return deterministic requests without importing or loading a model backend."""
     _validate_request_config(batch_size, frame_budget)
-    requests = [
-        {
-            "shot_id": shot["id"],
-            "prompt": build_structural_prompt(shot),
-            "evidence": shot["evidence"],
-        }
-        for shot in _ordered_shots(manifest)
-    ]
+    requests = []
+    for shot in _ordered_shots(manifest):
+        evidence = shot["evidence"][:frame_budget]
+        request_shot = {**shot, "evidence": evidence}
+        requests.append(
+            {
+                "shot_id": shot["id"],
+                "prompt": build_structural_prompt(request_shot),
+                "evidence": evidence,
+            }
+        )
     return {
         "mode": "dry-run",
         "model_path": model_path,
@@ -132,7 +135,7 @@ def prepare_dry_run(
     }
 
 
-def _load_transformers_backend(model_path: str, device: str, frame_budget: int) -> Callable[[dict], str]:
+def _load_transformers_backend(model_path: str, device: str) -> Callable[[list[dict]], list[str]]:
     """Load only a configured local Transformers model after dry-run is bypassed."""
     local_model = Path(model_path)
     if not local_model.is_dir():
@@ -152,15 +155,29 @@ def _load_transformers_backend(model_path: str, device: str, frame_budget: int) 
     ).to(device)
     model.eval()
 
-    def caption(request: dict) -> str:
+    def caption(requests: list[dict]) -> list[str]:
+        messages = []
         images = []
-        for evidence in request["evidence"][:frame_budget]:
-            with Image.open(evidence["path"]) as image:
-                images.append(image.convert("RGB"))
-        inputs = processor(images=images, text=request["prompt"], return_tensors="pt", padding=True)
+        for request in requests:
+            content = []
+            for evidence in request["evidence"]:
+                with Image.open(evidence["path"]) as image:
+                    images.append(image.convert("RGB"))
+                content.append({"type": "image", "image": evidence["path"]})
+            content.append({"type": "text", "text": request["prompt"]})
+            messages.append([{"role": "user", "content": content}])
+        prompts = [
+            processor.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
+            for message in messages
+        ]
+        inputs = processor(images=images, text=prompts, return_tensors="pt", padding=True)
         inputs = {name: value.to(device) for name, value in inputs.items()}
         generated = model.generate(**inputs, max_new_tokens=512)
-        return processor.batch_decode(generated, skip_special_tokens=True)[0]
+        input_lengths = [len(input_ids) for input_ids in inputs["input_ids"]]
+        generated_tokens = [
+            output[input_length:] for output, input_length in zip(generated, input_lengths, strict=True)
+        ]
+        return processor.batch_decode(generated_tokens, skip_special_tokens=True)
 
     return caption
 
@@ -177,7 +194,7 @@ def run_structural_captioning(
     batch_size: int,
     frame_budget: int,
     device: str,
-    backend: Callable[[dict], str] | None = None,
+    backend: Callable[[list[dict]], list[str]] | None = None,
 ) -> list[dict]:
     """Run structural-only requests and retain model output with evidence references."""
     dry_run = prepare_dry_run(
@@ -187,11 +204,13 @@ def run_structural_captioning(
         frame_budget=frame_budget,
         device=device,
     )
-    caption = backend or _load_transformers_backend(model_path, device, frame_budget)
+    caption = backend or _load_transformers_backend(model_path, device)
     records = []
     for batch in _batches(dry_run["requests"], batch_size):
-        for request in batch:
-            raw_response = caption(request)
+        raw_responses = caption(batch)
+        if not isinstance(raw_responses, list) or len(raw_responses) != len(batch):
+            raise ValueError("backend must return one ordered response per request")
+        for request, raw_response in zip(batch, raw_responses, strict=True):
             record = parse_model_response(raw_response, request["shot_id"])
             records.append(
                 {
