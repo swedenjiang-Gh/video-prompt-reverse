@@ -360,6 +360,8 @@ def test_load_records_accepts_json_arrays_objects_and_skycaptioner_jsonl(tmp_pat
     [
         '{"id":"one","id":"two"}',
         '{"score":NaN}',
+        '{"score":1e999}',
+        '{"id":"one"}\n{"score":1e999}\n',
     ],
 )
 def test_load_records_rejects_duplicate_keys_and_non_finite_json(tmp_path, raw):
@@ -507,4 +509,65 @@ def test_prepare_rejects_private_roots_and_common_credentials_before_instruction
             target_engine={"name": "Seedance", "parameters": {"duration_seconds": 1}},
             mode="reconstruction",
             generated_at="2026-08-09T10:00:00Z",
+        )
+
+
+@pytest.mark.parametrize(
+    ("mode", "generated_at", "message"),
+    [
+        ("api_key=credential-shaped-mode", "2026-08-09T10:00:00Z", "secret-like value"),
+        ("reconstruction", "C:/Users/J/private/generated-at", "private path"),
+    ],
+)
+def test_prepare_rejects_sensitive_metadata_before_building_instruction(
+    monkeypatch, mode, generated_at, message
+):
+    """Sensitive metadata must stop dry-run construction before any instruction exists."""
+    def forbidden_instruction(**kwargs):
+        pytest.fail("instruction builder must not be called")
+
+    monkeypatch.setattr(
+        "scripts.fuse_prompt_package.build_fusion_instruction", forbidden_instruction
+    )
+
+    with pytest.raises(ValueError, match=message):
+        prepare_fusion_dry_run(
+            evidence_manifest={"media": {"duration_seconds": 1.0}, "shots": []},
+            skycaptioner=[],
+            general_vlm=[],
+            asr_ocr=[],
+            human_context=[],
+            target_engine={"name": "Seedance", "parameters": {"duration_seconds": 1}},
+            mode=mode,
+            generated_at=generated_at,
+        )
+
+
+@pytest.mark.parametrize(
+    ("mode", "generated_at", "message"),
+    [
+        ("api_key=credential-shaped-mode", "2026-08-09T10:00:00Z", "secret-like value"),
+        ("reconstruction", "C:/Users/J/private/generated-at", "private path"),
+    ],
+)
+def test_fuse_rejects_sensitive_metadata_before_calling_runner(
+    mode, generated_at, message
+):
+    """Sensitive metadata must stop fusion before the injected runner can execute."""
+    def forbidden_runner(arguments, prompt):
+        pytest.fail("runner must not be called")
+
+    with pytest.raises(ValueError, match=message):
+        fuse_prompt_package(
+            evidence_manifest={"media": {"duration_seconds": 1.0}, "shots": []},
+            skycaptioner=[],
+            general_vlm=[],
+            asr_ocr=[],
+            human_context=[],
+            target_engine={"name": "Seedance", "parameters": {"duration_seconds": 1}},
+            mode=mode,
+            generated_at=generated_at,
+            llama_executable="D:/private/llama-cli.exe",
+            model_path="D:/private/qwen.gguf",
+            runner=forbidden_runner,
         )

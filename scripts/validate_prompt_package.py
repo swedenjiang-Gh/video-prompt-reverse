@@ -145,12 +145,24 @@ def loads_strict_json(raw: str) -> object:
     def reject_non_finite_number(value: str) -> None:
         raise ValueError(f"non-finite JSON number: {value}")
 
+    def reject_non_finite_floats(value: object) -> None:
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("non-finite JSON number")
+        if isinstance(value, dict):
+            for child in value.values():
+                reject_non_finite_floats(child)
+        elif isinstance(value, list):
+            for child in value:
+                reject_non_finite_floats(child)
+
     try:
-        return json.loads(
+        parsed = json.loads(
             raw,
             object_pairs_hook=reject_duplicate_keys,
             parse_constant=reject_non_finite_number,
         )
+        reject_non_finite_floats(parsed)
+        return parsed
     except (TypeError, ValueError):
         raise ValueError("input must contain exactly one strict JSON value") from None
 
@@ -221,7 +233,15 @@ def _is_portable_evidence_reference(reference: str) -> bool:
     ):
         return False
     parts = reference.split("/")
-    return all(part not in {"", ".", ".."} for part in parts)
+    for part in parts:
+        if part in {"", ".", ".."} or part.endswith((".", " ")):
+            return False
+        basename = part.split(".", 1)[0].casefold()
+        if basename in {"con", "prn", "aux", "nul"} or re.fullmatch(
+            r"(?:com|lpt)[1-9]", basename
+        ):
+            return False
+    return True
 
 
 def _normalize_constraint(value: str) -> str:

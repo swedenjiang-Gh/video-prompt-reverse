@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from scripts.validate_prompt_package import validate_prompt_package
+from scripts.validate_prompt_package import loads_strict_json, validate_prompt_package
 
 
 def complete_prompt(label: str) -> str:
@@ -441,10 +441,51 @@ def test_validate_rejects_non_local_or_malformed_evidence_references(reference):
         validate_prompt_package(package)
 
 
+@pytest.mark.parametrize(
+    "reserved_name",
+    [
+        "CON",
+        "prn",
+        "AuX",
+        "nul",
+        *[f"CoM{number}" for number in range(1, 10)],
+        *[f"lPt{number}" for number in range(1, 10)],
+    ],
+)
+@pytest.mark.parametrize("extension", ["", ".jpg"])
+def test_validate_rejects_windows_reserved_evidence_segments(reserved_name, extension):
+    """Windows device names must remain invalid in every segment, case, and extension form."""
+    package = valid_package()
+    package["shots"][0]["evidence_refs"] = [
+        f"evidence/{reserved_name}{extension}/frame.jpg"
+    ]
+
+    with pytest.raises(ValueError, match="portable relative paths"):
+        validate_prompt_package(package)
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "evidence/shot./frame.jpg",
+        "evidence/shot /frame.jpg",
+        "evidence/shot-001/frame.jpg.",
+        "evidence/shot-001/frame.jpg ",
+    ],
+)
+def test_validate_rejects_evidence_segments_ending_in_dot_or_space(reference):
+    """Windows-normalized trailing dots or spaces must not change an evidence target."""
+    package = valid_package()
+    package["shots"][0]["evidence_refs"] = [reference]
+
+    with pytest.raises(ValueError, match="portable relative paths"):
+        validate_prompt_package(package)
+
+
 def test_validate_accepts_normal_nested_relative_evidence_reference():
     """Overly broad path rejection must not block a normal nested task-local reference."""
     package = valid_package()
-    package["shots"][0]["evidence_refs"] = ["evidence/shot-001/entry frame.jpg"]
+    package["shots"][0]["evidence_refs"] = ["evidence/shot 1/frame.jpg"]
 
     validate_prompt_package(package)
 
@@ -531,16 +572,24 @@ def test_validate_rejects_non_finite_numeric_fields():
         validate_prompt_package(engine_nan)
 
 
-@pytest.mark.parametrize("invalid_kind", ["duplicate", "nan"])
+def test_loads_strict_json_rejects_overflow_float():
+    """Parsing an overflowing JSON number as infinity must break the strict input boundary."""
+    with pytest.raises(ValueError, match="strict JSON"):
+        loads_strict_json('{"nested":[{"score":1e999}]}')
+
+
+@pytest.mark.parametrize("invalid_kind", ["duplicate", "nan", "overflow"])
 def test_validator_cli_rejects_ambiguous_or_non_standard_json(tmp_path, invalid_kind):
     """Using permissive json.loads at the CLI boundary would accept invalid package files."""
     package = valid_package()
     if invalid_kind == "duplicate":
         raw = json.dumps(package)
         raw = raw[:-1] + ', "metadata": ' + json.dumps(package["metadata"]) + "}"
-    else:
+    elif invalid_kind == "nan":
         package["media"]["duration_seconds"] = math.nan
         raw = json.dumps(package)
+    else:
+        raw = json.dumps(package).replace('"duration_seconds": 4.0', '"duration_seconds": 1e999')
     package_path = tmp_path / "prompt-package.json"
     package_path.write_text(raw, encoding="utf-8")
     script = Path(__file__).resolve().parents[1] / "scripts" / "validate_prompt_package.py"

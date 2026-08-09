@@ -191,6 +191,7 @@ def prepare_fusion_dry_run(
             "evidence_manifest": evidence_manifest,
             "sources": source_inputs,
             "target_engine": target_engine,
+            "metadata": {"mode": mode, "generated_at": generated_at},
         }
     )
     required_sources = build_source_references(source_inputs)
