@@ -18,6 +18,23 @@ Use this checklist per shot and across the full sequence. Anchor every statement
 | Audio and dialogue | Spoken content, speaker, language, delivery, music, ambience, effects, synchronization, and silence. Attribute ASR/OCR separately from visual observation. |
 | Negative constraints | Source-fidelity exclusions derived from the reference, kept separate from artifact-prevention or generation-stability constraints. |
 
+## Canonical prompt section ownership
+
+Make the canonical sections orthogonal before producing variants:
+
+| Section | Owns |
+|---|---|
+| `SUBJECT` | Identity and appearance only. |
+| `ACTION` | Behavior only. |
+| `SCENE` | Environment and props only. |
+| `CAMERA` | Framing, lens, and camera motion only. |
+| `LIGHTING` | Illumination and color only. |
+| `TIMING` | Duration, pacing, and cuts only. Never restate specific actions, camera paths, or lighting changes. |
+| `AUDIO` | Sound only. |
+| `CONSTRAINTS` | Invariants and negatives only. Never prescribe a changed dimension. |
+
+Before cloning single-variable variants, rewrite `reconstruction_t2v` to remove every cross-section duplicate. Then copy all seven unchanged sections in full and change only the mapped section.
+
 ## Five-role anchors
 
 - **Screenwriter:** identify the beat, intention, causal action, information revealed, and dialogue function.

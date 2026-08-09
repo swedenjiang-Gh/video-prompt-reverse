@@ -69,9 +69,10 @@ The authorized fresh-agent rerun recorded these portable results:
 - PASS: all five professional roles were present.
 - PASS: reconstruction T2V, reconstruction I2V, and enhanced prompts were present.
 - PASS: all three variants were standalone prompts with all eight canonical sections in order. They changed only `CAMERA`, `LIGHTING`, and `ACTION`, respectively.
-- PASS: every unchanged section remained semantically compatible with its variant. Baseline `TIMING` required neither camera reframing nor an exact gesture, so the locked-camera and changed-action variants introduced no cross-section contradiction.
+- PARTIAL: baseline `TIMING` required neither camera reframing nor an exact-timed gesture, so the locked-camera variant removed the Round 2 contradiction.
+- FAIL: Variant C changed `ACTION` to pause and resume reading, while its unchanged `TIMING` still required reading and listening to remain continuous. The baseline sections were not fully orthogonal.
 - PASS: source-reconstruction and generation-stability negatives remained separate.
 - PASS: no model was downloaded or executed and no generation task was submitted.
 - PASS: strict model-backed fusion, prompt-package JSON validation, generation similarity, and production quality were explicitly reported as pending.
 
-Round 3 passes the Task 6 Skill behavior gate for these fields. It does not establish real model execution, strict machine fusion/validation, generated-video similarity, or production quality.
+Round 3 is partial and does not pass the semantic-variant field. A fresh-agent rerun must show orthogonal baseline sections and semantic compatibility for every unchanged section. Real model execution, strict machine fusion/validation, generated-video similarity, and production quality remain outside this evidence boundary.
