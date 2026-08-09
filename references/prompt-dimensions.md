@@ -4,7 +4,16 @@ Use this checklist per shot and across the full sequence. Anchor every statement
 
 ## Source closure
 
-Before reviews or prompts, create a fact inventory with one atomic row per fact: `fact_id | normalized fact | owner section | source stream | evidence_refs | status`. Status is exactly `source-supported`, `conservative inferred choice`, or `creative choice`. Every fact in `SUBJECT`, `ACTION`, `SCENE`, `CAMERA`, `LIGHTING`, `TIMING`, and `AUDIO` maps to one row. Source-supported facts must be explicitly present in `skycaptioner`, `general_vlm`, `asr_ocr`, or `human_context`; inferred or creative facts use `source stream: none` and carry the matching label inside their owner section. Reviews, anchors, and summaries cannot serve as source streams.
+Use a two-pass source-closure recipe:
+
+1. **Source draft:** Draft all six complete prompts from facts explicitly present in `skycaptioner`, `general_vlm`, `asr_ocr`, or `human_context`, plus owner-local `conservative inferred choice` or `creative choice` atoms. Do not claim closure yet.
+2. **Final atomization:** Freeze the final prompt wording. Split every clause in every prompt into atomic occurrences and build or expand the inventory from the final text: `fact_id | prompt_ref | normalized atom | owner section | source stream | evidence_refs | status`.
+
+Atoms include every identity, attribute, adjective, color, count, direction, location, action phase, gaze path, expression, pose, focus property, light color, pacing, duration, and edit declaration. One row covers one atom occurrence only; never hide multiple details in a composite row. Every final prompt atom maps to exactly one row, and every row maps back to exactly one prompt occurrence.
+
+For each `source-supported` row, the atom appears verbatim or equivalently in its named stream with evidence references. For each inferred or creative row, `source stream` is `none` and the same status appears inside the owner section. Reviews, anchors, summaries, and inventory references alone cannot replace the named-stream text.
+
+Claim `source-closed` only after both directions pass. Otherwise list unmatched or invalid atoms and report `attribution incomplete` and `partial`.
 
 Treat every detail as its own fact. A broad observation such as `bedroom scene` does not source earrings, necklaces, garments, prop state, layout, pose, depth of field, or illumination. Enumerate each supported detail with evidence references or omit it.
 
@@ -76,7 +85,7 @@ Write each role's review as a concrete contribution to reconstruction, not a res
 - Prefer corroboration across entry/peak/exit frames or adjacent shots for motion and continuity claims.
 - Treat a fixed-interval fallback as lower-confidence temporal coverage and declare it.
 - Keep SkyCaptioner structural observations, general VLM observations, ASR/OCR, and human context individually attributable until fusion. Label current controller/agent frame inspection as `controller/general-VLM observation` in `general_vlm`. Use `human_context` only when an explicitly identified human record supplied the fact; do not relabel agent/model observation as human.
-- Admit a prompt fact only through the fact inventory. Every source-supported identity, accessory, garment, prop attribute, pose, state, camera, or lighting fact points to its explicit named-stream observation and evidence reference; otherwise mark it as an owner-local conservative/creative choice or omit it.
+- Admit a prompt atom only through the final two-pass inventory bijection. Every source-supported atom points to explicit equivalent named-stream text and evidence references; every owner-local conservative/creative atom has `source stream: none`; otherwise omit it or report attribution incomplete.
 - Preserve contradictions. State which source supports each alternative and what evidence would resolve it.
 - Use explicit uncertainty for occluded identity, unreadable text, inaudible speech, ambiguous lens choice, hidden action, or unsupported physics.
 - Describe only observable source fidelity in reconstruction prompts. Put intentional creative changes in the enhanced prompt or a declared single-variable variant.

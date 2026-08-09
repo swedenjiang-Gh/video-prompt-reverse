@@ -171,3 +171,14 @@ The authorized no-model/no-validator fresh-agent rerun recorded these portable r
 - NOT EVALUATED: strict JSON, model, shipped-validator, generation, similarity, and production-quality execution remain Task 8 gates and were not treated as Task 6 blockers.
 
 Round 10 is partial/FAIL on the single source-closure gate. Before prompt drafting, every atomic fact must map through an auditable inventory to a named source or an owner-local conservative/creative label. I2V must name its approved input image path and role, or explicitly state that no approved reference image was supplied and avoid lock claims. A new independent fresh-agent rerun must demonstrate this closure before Task 6 can pass.
+
+## Task 6 forward-test round 11
+
+The authorized no-model/no-validator fresh-agent rerun recorded these portable results:
+
+- PASS: 12 of 13 Task 6 behavior gates passed, and an actual authorized derivative frame was declared and verified as the I2V first-frame input.
+- FAIL: the fact inventory was not exhaustive against the final six prompts. Some `source-supported` rows contained atoms absent from their named stream observations, while enhanced/variant rows combined or omitted counts, directions, gaze paths, expressions, poses, focus/light details, pacing, and edit declarations.
+- FAIL within the same gate: the response claimed `source-closed` even though the final prompt atoms and inventory rows did not form a two-way one-atom mapping.
+- NOT EVALUATED: strict JSON, model, shipped-validator, engine compatibility, generation, similarity, and production-quality execution remain Task 8 gates.
+
+Round 11 is partial/FAIL on the single exhaustive source-closure gate. Draft from the four streams, then atomize the final six prompts and build the inventory backward from every final occurrence. Claim `source-closed` only when prompt atoms and rows form a bidirectional one-atom mapping; otherwise report `attribution incomplete` and `partial`. The passing I2V asset rule remains unchanged.
