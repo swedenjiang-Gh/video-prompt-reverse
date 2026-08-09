@@ -86,9 +86,10 @@ The authorized fresh-agent rerun recorded these portable results:
 - PASS: all five professional roles were present.
 - PASS: reconstruction T2V, reconstruction I2V, and enhanced prompts were present.
 - PASS: all three variants were standalone prompts with all eight canonical sections in order. They changed only `CAMERA`, `LIGHTING`, and `ACTION`, respectively.
-- PASS: canonical `TIMING` remained limited to duration, pacing, and cuts. It specified no action, camera path, or lighting change, so every unchanged section remained semantically compatible with its variant.
+- PARTIAL: canonical `TIMING` remained limited to duration, pacing, and cuts and introduced no cross-section dependency.
+- FAIL: baseline `SCENE` prescribed lit/warm illumination states, while `LIGHTING` prescribed increasing background defocus. Illumination leaked into `SCENE`, and focus/depth leaked into `LIGHTING`, conflicting with the locked/no-rack-focus `CAMERA` variant.
 - PASS: source-reconstruction and generation-stability negatives remained separate.
 - PASS: model execution, strict prompt-package JSON validation, generation similarity, and production quality were explicitly reported as pending; no model was downloaded or executed and no generation task was submitted.
 - PARTIAL: the expected evidence-extraction script root was unavailable, so the standard runtime pipeline was not rerun. The authorized source and previously saved evidence were rechecked instead.
 
-Round 4 passes the Task 6 Skill behavior gate for the documented prompt fields. Runtime evidence extraction, real model-backed fusion, strict machine validation, generated-video similarity, and production quality remain outside this acceptance boundary.
+Round 4 is partial and does not pass the cross-section semantic lint field. A fresh-agent rerun must show that every baseline clause has exactly one owner and remains compatible with all unchanged variant sections. Runtime evidence extraction, real model-backed fusion, strict machine validation, generated-video similarity, and production quality remain outside this acceptance boundary.

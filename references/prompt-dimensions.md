@@ -26,14 +26,14 @@ Make the canonical sections orthogonal before producing variants:
 |---|---|
 | `SUBJECT` | Identity and appearance only. |
 | `ACTION` | Behavior only. |
-| `SCENE` | Environment and props only. |
-| `CAMERA` | Framing, lens, and camera motion only. |
-| `LIGHTING` | Illumination and color only. |
+| `SCENE` | Environment and props only. A lamp or cabinet may be named as a prop, but not as lit, glowing, or in a warm illumination state. |
+| `CAMERA` | Framing, lens, camera motion, focus, depth of field, and bokeh only. |
+| `LIGHTING` | Emitted light, color, exposure, and shadow only. Never mention bokeh, defocus, focus, or lens. |
 | `TIMING` | Duration, pacing, and cuts only. Never restate specific actions, camera paths, or lighting changes. |
 | `AUDIO` | Sound only. |
-| `CONSTRAINTS` | Invariants and negatives only. Never prescribe a changed dimension. |
+| `CONSTRAINTS` | Invariants and negatives only. Never restate variable-specific camera, lighting, action, or timing behavior. |
 
-Before cloning single-variable variants, rewrite `reconstruction_t2v` to remove every cross-section duplicate. Then copy all seven unchanged sections in full and change only the mapped section.
+Before cloning single-variable variants, audit every clause in `reconstruction_t2v`. A clause belongs to exactly one owner section. If changing another dimension could make the clause false, move it to that dimension's section. Rewrite the baseline until this lint passes; then copy all seven unchanged sections in full and change only the mapped section.
 
 ## Five-role anchors
 
