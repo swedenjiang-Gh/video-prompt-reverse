@@ -108,3 +108,15 @@ An independent neutral fresh-agent run with no prior implementation or review co
 - PASS: the proof boundary remained explicit. Standard model-backed fusion, strict prompt-package JSON validation, model execution, generated-video similarity, and production quality were reported as pending; no model was downloaded or executed and no generation task was submitted.
 
 Round 5 is partial/FAIL and does not pass the Task 6 fresh-agent Skill behavior gate for cross-section ownership. The ownership guidance now assigns all cut/editing declarations only to `TIMING` and all readable-text prohibitions only to `CONSTRAINTS`; a new independent fresh-agent rerun must demonstrate those boundaries before this gate can pass. Runtime model fusion, strict machine validation, executable generation, visual similarity, and production quality remain separate acceptance gates.
+
+## Task 6 forward-test round 6c
+
+The authorized fresh-agent rerun recorded these portable results:
+
+- PASS: the route, authorization boundary, four separate source streams, five-role review, complete prompt set, standalone eight-section variants, separated negative categories, and proof limits remained explicit.
+- PASS: cut and single-take clauses stayed in `TIMING`, and readable-text prohibitions stayed in `CONSTRAINTS`.
+- FAIL: source audio remained unresolved, but reconstruction prompts prescribed specific ambience and action-synchronized sounds. An `ACTION`-only variant then added the matching action while cloning the same sound in unchanged `AUDIO`.
+- FAIL: the enhanced prompt placed event emergence and reactions in `ACTION` but repeated the event state in `SCENE` and its progression in `TIMING`; only emitted illumination belonged in `LIGHTING`.
+- PASS: no model-backed fusion, strict JSON validation, generation, rendered similarity, or production-quality result was claimed.
+
+Round 6c is partial/FAIL and does not pass the source-evidence or canonical-ownership behavior gates. Reconstruction audio must remain explicitly unresolved until evidence resolves it, and the clause-ownership lint must pass independently for reconstruction, enhanced, and variant prompts. A new independent fresh-agent rerun must demonstrate both behaviors before Task 6 can pass.

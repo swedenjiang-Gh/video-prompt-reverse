@@ -25,15 +25,19 @@ Make the canonical sections orthogonal before producing variants:
 | Section | Owns |
 |---|---|
 | `SUBJECT` | Identity and appearance only. |
-| `ACTION` | Behavior only. |
-| `SCENE` | Environment and props only. A lamp or cabinet may be named as a prop, but not as lit, glowing, or in a warm illumination state. A book or page may be named as a prop, but its text legibility is not a scene property. |
+| `ACTION` | Event emergence, behavior, interactions, state changes, and reactions only. |
+| `SCENE` | Static environment, props, and layout only. A lamp or cabinet may be named as a prop, but not as lit, glowing, changing, or in a warm illumination state. A book or page may be named as a prop, but its text legibility is not a scene property. |
 | `CAMERA` | Framing, lens, camera motion, focus, depth of field, and bokeh only. Never mention cuts, editing, transitions, shot count, or single-take structure. |
 | `LIGHTING` | Emitted light, color, exposure, and shadow only. Never mention bokeh, defocus, focus, or lens. |
 | `TIMING` | Duration, pacing, shot count, cuts, editing, transitions, and single-take structure only. Own both positive and negative declarations such as no cuts. Never restate specific actions, camera paths, or lighting changes. |
-| `AUDIO` | Sound only. |
+| `AUDIO` | Sound and audiovisual synchronization only. Reconstruction audio contains resolved source evidence or an explicit unresolved boundary, never invented source-fidelity sound. |
 | `CONSTRAINTS` | Invariants and negatives only, including every prohibition on readable or visible text. Never restate variable-specific camera, lighting, action, or timing behavior. |
 
-Before cloning single-variable variants, audit every clause in `reconstruction_t2v`. A clause belongs to exactly one owner section. If changing another dimension could make the clause false, move it to that dimension's section. Rewrite the baseline until this lint passes; then copy all seven unchanged sections in full and change only the mapped section.
+Before delivery, audit every clause in every complete prompt: `reconstruction_t2v`, `reconstruction_i2v`, `enhanced`, and each variant. Build enhanced events with emergence and reactions in `ACTION`, unchanged static set and props in `SCENE`, emitted illumination in `LIGHTING`, and duration, pacing, cuts, or transitions in `TIMING`. A clause belongs to exactly one owner section in each prompt.
+
+Before cloning single-variable variants, apply the same audit to `reconstruction_t2v`. If changing another dimension could make a clause false, move it to that dimension's section. Rewrite the baseline until this lint passes; then copy all seven unchanged sections in full and change only the mapped section.
+
+For reconstruction audio, write only resolved evidence. If the source audio remains unresolved, use an action-independent boundary such as `source audio unresolved; no verified dialogue, music, ambience, or synchronized effects`. Keep that boundary unchanged in an `ACTION`-only variant. An action plus its synchronized sound is a two-section creative change, not a single-variable action variant.
 
 Apply ownership to prohibitions as strictly as positive descriptions: move a no-cut clause from `CAMERA` to `TIMING`, and move a no-readable-text clause from `SCENE` to `CONSTRAINTS`. Delete the source copy after each move; compatible duplication still fails the lint.
 
