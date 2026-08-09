@@ -132,3 +132,16 @@ The authorized fresh-agent rerun recorded these portable results:
 - PASS: no model-backed fusion, strict JSON validation, generation, rendered similarity, or production-quality result was claimed.
 
 Round 7 is partial/FAIL and does not pass the reconstruction-evidence or exact-ownership behavior gates. Fixed-coverage interpolation must be omitted or qualified inside `CAMERA` and `TIMING`, and enhanced non-occlusion requirements must appear only in `CONSTRAINTS`. A new independent fresh-agent rerun must demonstrate both behaviors before Task 6 can pass.
+
+## Task 6 forward-test round 8
+
+The authorized fresh-agent rerun recorded these portable results:
+
+- PASS: all six prompts had eight canonical sections, and each standalone variant changed text only in its declared section.
+- PASS: unresolved reconstruction audio, fixed-coverage conservative camera/edit labels, enhanced non-occlusion ownership, cut/readable-text ownership, separated source streams/negative categories, and proof-level boundaries remained explicit.
+- FAIL: `SCENE` repeated a book-holding interaction already owned by `ACTION`; `SCENE` may contain only the static book prop and its location.
+- FAIL: reconstruction `CONSTRAINTS` repeated camera-mechanism and single-take/no-cut epistemic prohibitions owned by `CAMERA` and `TIMING`. The unchanged copy also contradicted the locked-camera choice in the `CAMERA` variant.
+- CONCERN: `general_vlm` frame observations were described as human observations without an identified human visual-review record. Controller/agent frame inspection must be labelled as controller/general-VLM observation; only actual human records belong in `human_context`.
+- PASS: no model-backed fusion, strict JSON validation, generation, rendered similarity, or production-quality result was claimed.
+
+Round 8 is partial/FAIL and does not pass the exact-ownership or seven-section compatibility gates. `SCENE` must use static prop/layout wording, camera/edit epistemic clauses must remain inside `CAMERA`/`TIMING`, and source observations must identify their actual producer. A new independent fresh-agent rerun must demonstrate all three behaviors before Task 6 can pass.
