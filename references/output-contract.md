@@ -5,6 +5,12 @@ observation streams, human project context, target engine settings, mode, and ge
 time. It emits `prompt-package.json`; `prompt-package.md` is derived only after the JSON
 passes `scripts/validate_prompt_package.py`.
 
+The model-facing fusion uses four small contracts, not one full-package request. The base, I2V, and
+enhanced stages represent prompts as eight named section objects containing attributed atom arrays.
+The variant stage returns only camera-motion, lighting, and timing replacement atom arrays. The
+controller copies fixed package fields, clones the seven unchanged base sections into each variant,
+renders the final eight-line strings, and derives the attribution ledger before strict validation.
+
 ## Strict JSON shape
 
 The top-level object has exactly these fields:
@@ -31,28 +37,32 @@ The top-level object has exactly these fields:
   lists. Fidelity limits must not be collapsed into generation-stability negatives, and the two
   lists must remain disjoint after Unicode, case, whitespace, and punctuation normalization.
 - `uncertainties`: a list of explicit uncertainties; it may be empty when none remain.
+- `attribution`: exactly `status` and `entries`. `status` is `source-closed`; `entries` contains
+  exactly one row per semicolon-delimited atom occurrence across the three main prompts and three
+  variants. Each row records `fact_id`, exact `prompt_ref`, exact `atom`, owner section, source
+  stream/reference/quote, evidence references, and status. Source-supported atoms contain an exact
+  quote from the named input record. Conservative-inferred and creative atoms are labelled inside
+  their owner section and carry no source record.
 
-The model response and every Task 5 JSON/JSONL file boundary use the same strict parser. Duplicate
-keys, `NaN`/infinities, Markdown fences, prefix/suffix prose, malformed JSON, missing or extra
-fields, invalid timestamps, provenance loss, and mismatches with the requested metadata/engine
-are rejected. Strict serialization uses `allow_nan=False`.
-
-The model-facing instruction embeds `PROMPT_PACKAGE_CONTRACT`, the same dependency-light canonical
-contract from which validator field sets, source namespaces, roles, prompt sections, dimension
-mapping, and variant count are derived. The contract also enumerates all binding leaf types and
-cross-field invariants.
+Every stage response and every Task 5 JSON/JSONL file boundary uses the strict parser. Each stage
+rejects missing, null, or extra stage-owned fields before the next request. Duplicate keys,
+`NaN`/infinities, Markdown fences, prefix/suffix prose, malformed JSON, invalid timestamps,
+provenance loss, mismatches with requested metadata/engine, and missing, duplicate, extra,
+mismatched, or unsupported attribution rows are rejected. Strict serialization uses
+`allow_nan=False`. `PROMPT_PACKAGE_CONTRACT` remains the final controller/validator contract; it is
+not sent back to each model stage as an oversized generation task.
 
 ## Privacy and invocation
 
 One recursive gate runs before instruction construction, dry-run output, or runner invocation and
 again on the fused package. It rejects semantic credential keys and common credential values,
 including `github_pat_...`, plus absolute/private roots; harmless metadata such as `token_count`
-is allowed. The llama.cpp adapter writes the prompt to one UTF-8 temporary file and passes its path
-through the verified `--file` argument in a structured argument list and removes the file in a
-`finally` path. It does not use stdin for the initial chat prompt, a shell, or print the prompt,
-executable path, model path, stdout, or stderr. An injected runner is used by tests. Dry-run builds
-the deterministic request and a redacted argument template without process startup. The strict
-one-object parser intentionally rejects any CLI banner, prompt echo, Markdown fence, or exit marker.
+is allowed. The llama.cpp adapter accepts only a loopback HTTP `llama-server`, posts exactly four
+sequential JSON-object chat requests with no automatic retry, and returns only each assistant content
+field. It does not use a shell or merge server logs into model content. An injected runner is used by
+tests. Dry-run builds the common deterministic context and a redacted endpoint template without
+process startup. The strict one-object parser still rejects commentary, Markdown fences,
+prefix/suffix text, or multiple values inside assistant content.
 
 ## Markdown
 

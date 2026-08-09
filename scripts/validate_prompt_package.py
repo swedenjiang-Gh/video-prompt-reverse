@@ -22,6 +22,7 @@ PROMPT_PACKAGE_CONTRACT = {
             "anchors",
             "negative_constraints",
             "uncertainties",
+            "attribution",
         ],
         "metadata": ["mode", "generated_at"],
         "media": ["duration_seconds", "width", "height", "fps"],
@@ -44,6 +45,18 @@ PROMPT_PACKAGE_CONTRACT = {
         "single_variable_variant": ["changed_dimension", "prompt"],
         "engine": ["name", "parameters", "compatibility_notes"],
         "negative_constraints": ["reconstruction_source", "generation_stability"],
+        "attribution": ["status", "entries"],
+        "attribution_entry": [
+            "fact_id",
+            "prompt_ref",
+            "atom",
+            "owner_section",
+            "source_stream",
+            "source_ref",
+            "source_quote",
+            "evidence_refs",
+            "status",
+        ],
     },
     "types": {
         "metadata.mode": "non-empty string",
@@ -72,6 +85,8 @@ PROMPT_PACKAGE_CONTRACT = {
         "anchors": "non-empty array of non-empty strings",
         "negative_constraints.*": "non-empty array of non-empty strings",
         "uncertainties": "array of non-empty strings",
+        "attribution.status": "source-closed",
+        "attribution.entries": "one attribution entry per final prompt atom occurrence",
     },
     "prompt_format": {
         "ordered_sections": [
@@ -115,6 +130,7 @@ PROMPT_PACKAGE_CONTRACT = {
         "credentials and private roots are forbidden before and after fusion",
         "evidence references are portable local relative paths",
         "Markdown is rendered from validated data only",
+        "every final prompt atom has exactly one auditable attribution row",
     ],
 }
 
@@ -211,6 +227,152 @@ def _validate_complete_prompt(value: object, location: str) -> dict[str, str]:
     return dict(parsed)
 
 
+def _prompt_atom_occurrences(prompts: dict) -> dict[str, tuple[str, str]]:
+    prompt_values = [
+        ("reconstruction_t2v", prompts["reconstruction_t2v"]),
+        ("reconstruction_i2v", prompts["reconstruction_i2v"]),
+        ("enhanced", prompts["enhanced"]),
+        *[
+            (f"variant_{index}", variant["prompt"])
+            for index, variant in enumerate(prompts["single_variable_variants"], start=1)
+        ],
+    ]
+    occurrences = {}
+    for prompt_name, prompt in prompt_values:
+        sections = _validate_complete_prompt(prompt, prompt_name)
+        for section in PROMPT_SECTIONS:
+            atoms = [atom.strip() for atom in sections[section].split(";")]
+            if any(not atom for atom in atoms):
+                raise ValueError(f"{prompt_name}.{section} contains an empty prompt atom")
+            for index, atom in enumerate(atoms, start=1):
+                occurrences[f"{prompt_name}.{section}.{index:03d}"] = (atom, section)
+    return occurrences
+
+
+def _string_leaves(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [leaf for child in value.values() for leaf in _string_leaves(child)]
+    if isinstance(value, list):
+        return [leaf for child in value for leaf in _string_leaves(child)]
+    return []
+
+
+def _evidence_references(value: object) -> set[str]:
+    references = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "evidence_refs" and isinstance(child, list):
+                references.update(item for item in child if isinstance(item, str))
+            elif key == "path" and isinstance(child, str):
+                references.add(child)
+            else:
+                references.update(_evidence_references(child))
+    elif isinstance(value, list):
+        for child in value:
+            references.update(_evidence_references(child))
+    return references
+
+
+def _validate_attribution(
+    attribution: object,
+    prompts: dict,
+    sources: dict,
+    source_inputs: dict | None,
+) -> None:
+    attribution = _require_exact_keys(
+        attribution,
+        set(PROMPT_PACKAGE_CONTRACT["objects"]["attribution"]),
+        "attribution",
+    )
+    if attribution["status"] != "source-closed":
+        raise ValueError("attribution.status must be source-closed")
+    entries = attribution["entries"]
+    if not isinstance(entries, list):
+        raise ValueError("attribution.entries must be a list")
+    expected = _prompt_atom_occurrences(prompts)
+    if len(entries) != len(expected):
+        raise ValueError("every final prompt atom requires exactly one attribution row")
+
+    source_records = {}
+    if source_inputs is not None:
+        if not isinstance(source_inputs, dict):
+            raise ValueError("source_inputs must be an object")
+        for namespace in SOURCE_NAMESPACES:
+            records = source_inputs.get(namespace, [])
+            if not isinstance(records, list):
+                raise ValueError(f"source_inputs.{namespace} must be a list")
+            source_records.update(zip(sources[namespace], records))
+
+    seen_refs = set()
+    seen_fact_ids = set()
+    entry_fields = set(PROMPT_PACKAGE_CONTRACT["objects"]["attribution_entry"])
+    for index, value in enumerate(entries):
+        entry = _require_exact_keys(value, entry_fields, f"attribution entry {index}")
+        fact_id = entry["fact_id"]
+        prompt_ref = entry["prompt_ref"]
+        if not isinstance(fact_id, str) or not fact_id.strip() or fact_id in seen_fact_ids:
+            raise ValueError("attribution fact_id values must be unique non-empty strings")
+        if not isinstance(prompt_ref, str) or prompt_ref not in expected or prompt_ref in seen_refs:
+            raise ValueError("every final prompt atom requires exactly one attribution row")
+        seen_fact_ids.add(fact_id)
+        seen_refs.add(prompt_ref)
+        expected_atom, expected_section = expected[prompt_ref]
+        if entry["atom"] != expected_atom or entry["owner_section"] != expected_section:
+            raise ValueError("attribution row does not match its final prompt atom")
+        evidence_refs = entry["evidence_refs"]
+        if not isinstance(evidence_refs, list) or any(
+            not isinstance(reference, str) or not _is_portable_evidence_reference(reference)
+            for reference in evidence_refs
+        ):
+            raise ValueError("attribution evidence_refs must be portable relative paths")
+
+        status = entry["status"]
+        if status == "source-supported":
+            namespace = entry["source_stream"]
+            source_ref = entry["source_ref"]
+            source_quote = entry["source_quote"]
+            if namespace not in SOURCE_NAMESPACES:
+                raise ValueError("source-supported attribution requires a named source stream")
+            if not isinstance(source_ref, str) or source_ref not in sources[namespace]:
+                raise ValueError("source-supported attribution requires a valid source reference")
+            if not isinstance(source_quote, str) or not source_quote.strip():
+                raise ValueError("source-supported attribution requires a source quote")
+            if source_quote.casefold() not in expected_atom.casefold():
+                raise ValueError("prompt atom must contain its exact source quote")
+            if source_inputs is not None:
+                record = source_records.get(source_ref)
+                if record is None or not any(
+                    source_quote.casefold() in leaf.casefold() for leaf in _string_leaves(record)
+                ):
+                    raise ValueError("attribution source quote is absent from its source record")
+                available_evidence = _evidence_references(record)
+                if available_evidence and (
+                    not evidence_refs or not set(evidence_refs).issubset(available_evidence)
+                ):
+                    raise ValueError("attribution evidence_refs do not match the source record")
+        elif status in {"conservative-inferred", "creative"}:
+            expected_label = (
+                "conservative inferred choice"
+                if status == "conservative-inferred"
+                else "creative choice"
+            )
+            if (
+                entry["source_stream"] != "none"
+                or entry["source_ref"] is not None
+                or entry["source_quote"] is not None
+                or evidence_refs
+                or expected_label not in expected_atom.casefold()
+            ):
+                raise ValueError(f"{status} attribution must be owner-local and explicitly labelled")
+        else:
+            raise ValueError("attribution status is invalid")
+
+    if seen_refs != set(expected):
+        raise ValueError("every final prompt atom requires exactly one attribution row")
+
+
 def _number(value: object, location: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{location} must be a number")
@@ -303,6 +465,7 @@ def validate_prompt_package(
     expected_mode: str | None = None,
     expected_generated_at: str | None = None,
     target_engine: dict | None = None,
+    source_inputs: dict | None = None,
 ) -> None:
     """Reject prompt packages that violate the strict output contract."""
     _scan_for_leakage(package)
@@ -515,6 +678,7 @@ def validate_prompt_package(
             raise ValueError(
                 f"variant {dimension} must change only {declared_section} from reconstruction_t2v"
             )
+    _validate_attribution(package["attribution"], prompts, sources, source_inputs)
 
 
 def _load_optional_json(path: Path | None) -> object | None:

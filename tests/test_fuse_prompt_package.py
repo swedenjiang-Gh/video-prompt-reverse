@@ -6,15 +6,84 @@ import pytest
 
 from test_validate_prompt_package import valid_package
 from scripts.fuse_prompt_package import (
-    _default_runner,
+    _default_http_runner,
+    assemble_staged_fusion,
     build_fusion_instruction,
+    build_fusion_stage_instruction,
     build_source_references,
+    canonicalize_prompt_draft,
     extract_strict_json_object,
     fuse_prompt_package,
     load_records,
+    normalize_fusion_draft,
     prepare_fusion_dry_run,
     write_prompt_package,
 )
+
+
+def to_fusion_draft(package):
+    draft = deepcopy(package)
+    attribution_by_ref = {
+        entry["prompt_ref"]: entry for entry in draft.pop("attribution")["entries"]
+    }
+
+    def structured_prompt(prompt_name, prompt):
+        sections = {}
+        for line in prompt.splitlines():
+            section, value = line.split(":", 1)
+            atoms = []
+            for index, atom in enumerate(value.strip().split(";"), start=1):
+                entry = attribution_by_ref[f"{prompt_name}.{section}.{index:03d}"]
+                atoms.append(
+                    {
+                        "text": atom.strip(),
+                        "source_stream": entry["source_stream"],
+                        "source_ref": entry["source_ref"],
+                        "source_quote": entry["source_quote"],
+                        "evidence_refs": entry["evidence_refs"],
+                        "status": entry["status"],
+                    }
+                )
+            sections[section] = atoms
+        return sections
+
+    prompts = draft["prompts"]
+    prompts["reconstruction_t2v"] = structured_prompt(
+        "reconstruction_t2v", prompts["reconstruction_t2v"]
+    )
+    prompts["reconstruction_i2v"] = structured_prompt(
+        "reconstruction_i2v", prompts["reconstruction_i2v"]
+    )
+    prompts["enhanced"] = structured_prompt("enhanced", prompts["enhanced"])
+    for index, variant in enumerate(prompts["single_variable_variants"], start=1):
+        variant["prompt"] = structured_prompt(f"variant_{index}", variant["prompt"])
+    return draft
+
+
+def to_stage_outputs(package):
+    draft = to_fusion_draft(package)
+    baseline = draft["prompts"]["reconstruction_t2v"]
+    variant_sections = {}
+    dimension_sections = {
+        "camera_motion": "CAMERA",
+        "lighting": "LIGHTING",
+        "timing": "TIMING",
+    }
+    for variant in draft["prompts"]["single_variable_variants"]:
+        dimension = variant["changed_dimension"]
+        variant_sections[dimension] = variant["prompt"][dimension_sections[dimension]]
+    return {
+        "base": {
+            "five_role_review": draft["five_role_review"],
+            "reconstruction_t2v": baseline,
+            "anchors": draft["anchors"],
+            "negative_constraints": draft["negative_constraints"],
+            "uncertainties": draft["uncertainties"],
+        },
+        "i2v": {"reconstruction_i2v": draft["prompts"]["reconstruction_i2v"]},
+        "enhanced": {"enhanced": draft["prompts"]["enhanced"]},
+        "variants": variant_sections,
+    }
 
 
 def test_build_instruction_keeps_all_four_source_namespaces_separate():
@@ -75,8 +144,8 @@ def test_build_source_references_assigns_stable_namespaced_provenance_ids():
     }
 
 
-def test_build_instruction_embeds_the_machine_readable_output_contract():
-    """Shorthand model instructions must not omit binding fields, types, or invariants."""
+def test_stage_instructions_expose_only_the_small_stage_contract():
+    """Showing the full package contract to every call would recreate the oversized failure."""
     instruction = build_fusion_instruction(
         evidence_manifest={"media": {"duration_seconds": 1.0}, "shots": []},
         skycaptioner=[],
@@ -87,122 +156,21 @@ def test_build_instruction_embeds_the_machine_readable_output_contract():
         mode="reconstruction",
         generated_at="2026-08-09T10:00:00Z",
     )
-    contract = json.loads(
-        instruction.split("OUTPUT_CONTRACT_JSON\n", 1)[1].split(
-            "\nEND_OUTPUT_CONTRACT_JSON", 1
-        )[0]
+    assert "OUTPUT_CONTRACT_JSON" not in instruction
+    base = build_fusion_stage_instruction("base", instruction)
+    later = build_fusion_stage_instruction(
+        "variants", instruction, to_stage_outputs(valid_package())["base"]["reconstruction_t2v"]
     )
-
-    assert contract["objects"] == {
-        "prompt_package": [
-            "metadata",
-            "media",
-            "shots",
-            "sources",
-            "five_role_review",
-            "prompts",
-            "engine",
-            "anchors",
-            "negative_constraints",
-            "uncertainties",
-        ],
-        "metadata": ["mode", "generated_at"],
-        "media": ["duration_seconds", "width", "height", "fps"],
-        "shot": ["id", "timestamps", "evidence_refs", "description"],
-        "timestamps": ["start", "end"],
-        "sources": ["skycaptioner", "general_vlm", "asr_ocr", "human_context"],
-        "five_role_review": [
-            "screenwriter",
-            "director",
-            "cinematographer",
-            "production_designer",
-            "editor",
-        ],
-        "prompts": [
-            "reconstruction_t2v",
-            "reconstruction_i2v",
-            "enhanced",
-            "single_variable_variants",
-        ],
-        "single_variable_variant": ["changed_dimension", "prompt"],
-        "engine": ["name", "parameters", "compatibility_notes"],
-        "negative_constraints": ["reconstruction_source", "generation_stability"],
-    }
-    assert contract["types"] == {
-        "metadata.mode": "non-empty string",
-        "metadata.generated_at": "timezone-aware ISO 8601 string",
-        "media.duration_seconds": "positive finite number",
-        "media.width": "positive integer",
-        "media.height": "positive integer",
-        "media.fps": "positive finite number",
-        "shots": "non-empty array of shot objects",
-        "shot.id": "unique non-empty string",
-        "shot.timestamps.start": "non-negative finite number",
-        "shot.timestamps.end": "positive finite number",
-        "shot.evidence_refs": "non-empty array of portable relative path strings",
-        "shot.description": "non-empty string",
-        "sources.*": "array of own-namespace reference strings",
-        "five_role_review.*": "non-empty string",
-        "prompts.reconstruction_t2v": "complete standalone prompt string",
-        "prompts.reconstruction_i2v": "complete standalone prompt string",
-        "prompts.enhanced": "complete standalone prompt string",
-        "prompts.single_variable_variants": "array of exactly 3 variant objects",
-        "single_variable_variant.changed_dimension": "unique allowed dimension string",
-        "single_variable_variant.prompt": "complete standalone prompt string",
-        "engine.name": "non-empty string",
-        "engine.parameters": "non-empty object of named finite scalar values",
-        "engine.compatibility_notes": "array of non-empty strings",
-        "anchors": "non-empty array of non-empty strings",
-        "negative_constraints.*": "non-empty array of non-empty strings",
-        "uncertainties": "array of non-empty strings",
-    }
-    assert contract["prompt_format"] == {
-        "ordered_sections": [
-            "SUBJECT",
-            "ACTION",
-            "SCENE",
-            "CAMERA",
-            "LIGHTING",
-            "TIMING",
-            "AUDIO",
-            "CONSTRAINTS",
-        ],
-        "dimension_to_section": {
-            "subject": "SUBJECT",
-            "action": "ACTION",
-            "scene": "SCENE",
-            "camera": "CAMERA",
-            "camera_motion": "CAMERA",
-            "lighting": "LIGHTING",
-            "timing": "TIMING",
-            "audio": "AUDIO",
-            "constraints": "CONSTRAINTS",
-        },
-        "variant_baseline": "prompts.reconstruction_t2v",
-        "variant_count": 3,
-    }
-    assert contract["strict_json"] == (
-        "one bare RFC 8259 object; no duplicate keys, non-finite numbers, prefix, suffix, or fences"
-    )
-    assert contract["invariants"] == [
-        "all listed objects reject additional fields",
-        "metadata exactly matches the requested mode and generation time",
-        "media exactly matches the evidence manifest",
-        "shots preserve manifest order, timestamps, and evidence references",
-        "shot timestamps are chronological, non-overlapping, and within media bounds",
-        "sources exactly match required own-namespace references",
-        "each variant changes exactly its declared section from reconstruction_t2v",
-        "engine name and parameters match the target engine",
-        "engine parameters are structured scalars and absent from prompt prose",
-        "negative categories are non-empty and normalized-disjoint",
-        "credentials and private roots are forbidden before and after fusion",
-        "evidence references are portable local relative paths",
-        "Markdown is rendered from validated data only",
-    ]
+    assert "FUSION_STAGE\nbase" in base
+    assert "Do not output metadata, media, shots, sources, prompts, engine, attribution" in base
+    assert "BASELINE_T2V_JSON" not in base
+    assert "FUSION_STAGE\nvariants" in later
+    assert "BASELINE_T2V_JSON" in later
+    assert "Do not repeat the other seven sections" in later
 
 
-def test_fuse_uses_injected_runner_with_argument_array_then_validates_output(capsys):
-    """Shell interpolation, an unvalidated response, or logging private paths must break this test."""
+def test_fuse_runs_four_small_contracts_and_controller_assembles_fixed_fields(capsys):
+    """One oversized model response or model-controlled fixed fields must break this test."""
     manifest = {
         "media": {
             "video_path": "input/reference.mp4",
@@ -223,17 +191,24 @@ def test_fuse_uses_injected_runner_with_argument_array_then_validates_output(cap
     }
     sources = {
         "skycaptioner": [{"shot_id": "shot-001"}],
-        "general_vlm": [{"shot_id": "shot-001"}],
+        "general_vlm": [
+            {
+                "shot_id": "shot-001",
+                "observation": "A performer crosses the room in one continuous shot.",
+            }
+        ],
         "asr_ocr": [{"shot_id": "shot-001"}],
         "human_context": [{"project": "launch"}],
     }
     package = valid_package()
     package["sources"] = build_source_references(sources)
+    stage_outputs = to_stage_outputs(package)
     seen = []
 
-    def runner(arguments, prompt):
-        seen.append((arguments, prompt))
-        return json.dumps(package)
+    def runner(endpoint, prompt):
+        seen.append((endpoint, prompt))
+        stage = prompt.split("FUSION_STAGE\n", 1)[1].split("\n", 1)[0]
+        return json.dumps(stage_outputs[stage])
 
     result = fuse_prompt_package(
         evidence_manifest=manifest,
@@ -244,31 +219,153 @@ def test_fuse_uses_injected_runner_with_argument_array_then_validates_output(cap
         target_engine=package["engine"],
         mode="reconstruction",
         generated_at="2026-08-09T10:00:00Z",
-        llama_executable="D:/Private Runtime/llama-cli.exe",
-        model_path="D:/Private Models/qwen.gguf",
+        server_url="http://127.0.0.1:18089",
         runner=runner,
     )
 
     assert result == package
-    assert seen[0][0] == [
-        "D:/Private Runtime/llama-cli.exe",
-        "-m",
-        "D:/Private Models/qwen.gguf",
-        "--ctx-size",
-        "32768",
-        "--temp",
-        "0",
-        "--log-disable",
-        "--no-show-timings",
-        "--no-display-prompt",
-        "--simple-io",
-        "--single-turn",
+    assert [prompt.split("FUSION_STAGE\n", 1)[1].split("\n", 1)[0] for _, prompt in seen] == [
+        "base",
+        "i2v",
+        "enhanced",
+        "variants",
     ]
-    assert isinstance(seen[0][0], list)
-    assert "SOURCE_INPUTS_JSON" in seen[0][1]
+    assert all(endpoint == "http://127.0.0.1:18089" for endpoint, _ in seen)
+    assert all("SOURCE_INPUTS_JSON" in prompt for _, prompt in seen)
+    assert "BASELINE_T2V_JSON" not in seen[0][1]
+    assert all("BASELINE_T2V_JSON" in prompt for _, prompt in seen[1:])
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_normalize_fusion_draft_builds_prompt_lines_and_attribution_deterministically():
+    """Model prose must not control final prompt formatting or attribution row coverage."""
+    package = valid_package()
+    draft = to_fusion_draft(package)
+
+    assert normalize_fusion_draft(draft) == package
+
+    missing_section = deepcopy(draft)
+    del missing_section["prompts"]["enhanced"]["AUDIO"]
+    with pytest.raises(ValueError, match="prompt sections"):
+        normalize_fusion_draft(missing_section)
+
+
+def test_canonicalize_prompt_draft_keeps_only_provable_source_support():
+    """Model aliases, false quote closure, or unlabelled creative atoms must not reach the package."""
+    prompt = to_stage_outputs(valid_package())["base"]["reconstruction_t2v"]
+    prompt["SUBJECT"] = [
+        {
+            "text": "The performer wears a red coat.",
+            "source_stream": "general_vlm",
+            "source_ref": "general_vlm:0001",
+            "source_quote": "red coat",
+            "evidence_refs": ["evidence/frame.jpg"],
+            "status": "supported",
+        }
+    ]
+    prompt["ACTION"] = [
+        {
+            "text": "The performer dances.",
+            "source_stream": "general_vlm",
+            "source_ref": "general_vlm:0001",
+            "source_quote": "unrelated claim",
+            "evidence_refs": ["evidence/frame.jpg"],
+            "status": "supported",
+        }
+    ]
+    prompt["CONSTRAINTS"] = [
+        {
+            "text": "Keep the wardrobe stable.",
+            "source_stream": "none",
+            "source_ref": "",
+            "source_quote": "",
+            "evidence_refs": [],
+            "status": "creative",
+        }
+    ]
+    source_inputs = {
+        "skycaptioner": [],
+        "general_vlm": [
+            {
+                "observation": "The performer wears a red coat.",
+                "evidence_refs": ["evidence/frame.jpg"],
+            }
+        ],
+        "asr_ocr": [],
+        "human_context": [],
+    }
+    required_sources = build_source_references(source_inputs)
+
+    result = canonicalize_prompt_draft(prompt, source_inputs, required_sources)
+
+    assert result["SUBJECT"][0]["status"] == "source-supported"
+    assert result["ACTION"][0] == {
+        "text": "conservative inferred choice: The performer dances.",
+        "source_stream": "none",
+        "source_ref": None,
+        "source_quote": None,
+        "evidence_refs": [],
+        "status": "conservative-inferred",
+    }
+    assert result["CONSTRAINTS"][0]["text"] == (
+        "creative choice: Keep the wardrobe stable."
+    )
+    assert result["CONSTRAINTS"][0]["source_ref"] is None
+
+
+def test_assemble_replaces_unchanged_model_variants_with_declared_creative_changes():
+    """A copied baseline section is not a single-variable variant and needs no model retry."""
+    package = valid_package()
+    stage_outputs = to_stage_outputs(package)
+    baseline = stage_outputs["base"]["reconstruction_t2v"]
+    section_by_dimension = {"camera_motion": "CAMERA", "lighting": "LIGHTING", "timing": "TIMING"}
+    for dimension, section in section_by_dimension.items():
+        stage_outputs["variants"][dimension] = deepcopy(baseline[section])
+    sources = {
+        "skycaptioner": [],
+        "general_vlm": [
+            {
+                "shot_id": "shot-001",
+                "observation": "A performer crosses the room in one continuous shot.",
+            }
+        ],
+        "asr_ocr": [],
+        "human_context": [],
+    }
+    manifest = {
+        "media": {
+            "duration_seconds": 4.0,
+            "width": 1920,
+            "height": 1080,
+            "fps": 24.0,
+        },
+        "shots": [
+            {
+                "id": "shot-001",
+                "timestamps": {"start": 0.0, "end": 4.0},
+                "evidence": [{"path": "evidence/shot-001-entry.jpg"}],
+            }
+        ],
+    }
+
+    result = assemble_staged_fusion(
+        stage_outputs=stage_outputs,
+        evidence_manifest=manifest,
+        source_inputs=sources,
+        required_sources=build_source_references(sources),
+        target_engine=package["engine"],
+        mode="reconstruction",
+        generated_at="2026-08-09T10:00:00Z",
+    )
+
+    for variant in result["prompts"]["single_variable_variants"]:
+        changed_section = section_by_dimension[variant["changed_dimension"]]
+        changed_line = next(
+            line for line in variant["prompt"].splitlines() if line.startswith(changed_section)
+        )
+        assert "creative choice:" in changed_line
 
 
 def test_write_outputs_json_and_markdown_only_after_validation(tmp_path):
@@ -333,21 +430,9 @@ def test_prepare_dry_run_builds_the_request_without_runner_or_private_paths():
         "asr_ocr": [],
         "human_context": [],
     }
-    assert result["argument_template"] == [
-        "<llama-executable>",
-        "-m",
-        "<local-model>",
-        "--ctx-size",
-        "32768",
-        "--temp",
-        "0",
-        "--log-disable",
-        "--no-show-timings",
-        "--no-display-prompt",
-        "--simple-io",
-        "--single-turn",
-    ]
-    assert "OUTPUT_CONTRACT_JSON" in result["instruction"]
+    assert result["endpoint_template"] == "http://127.0.0.1:<port>/v1/chat/completions"
+    assert "OUTPUT_CONTRACT_JSON" not in result["instruction"]
+    assert "SOURCE_INPUTS_JSON" in result["instruction"]
 
 
 def test_load_records_accepts_json_arrays_objects_and_skycaptioner_jsonl(tmp_path):
@@ -397,48 +482,32 @@ def test_instruction_serialization_rejects_non_finite_source_values():
         )
 
 
-def test_default_runner_passes_an_argument_array_and_prompt_file_without_shell(
-    tmp_path, monkeypatch, capsys
-):
-    """Using stdin, a command string, shell interpolation, or leaked runtime values must fail."""
-    executable = tmp_path / "private llama" / "llama-cli.exe"
-    executable.parent.mkdir()
-    executable.write_bytes(b"local executable placeholder")
-    model = tmp_path / "private model" / "qwen.gguf"
-    model.parent.mkdir()
-    model.write_bytes(b"local model placeholder")
-    arguments = [str(executable), "-m", str(model), "--temp", "0"]
+def test_default_http_runner_returns_only_the_assistant_content(monkeypatch, capsys):
+    """The HTTP envelope must not contaminate the strict model JSON body."""
     calls = []
-    prompt_paths = []
 
-    class Completed:
-        returncode = 0
-        stdout = '{"ok":true}'
+    class Response:
+        def __enter__(self):
+            return self
 
-    def fake_run(received_arguments, **kwargs):
-        prompt_path = Path(received_arguments[received_arguments.index("--file") + 1])
-        prompt_paths.append(prompt_path)
-        assert prompt_path.read_text(encoding="utf-8") == "private prompt"
-        calls.append((received_arguments, kwargs))
-        return Completed()
+        def __exit__(self, *args):
+            return False
 
-    monkeypatch.setattr("scripts.fuse_prompt_package.subprocess.run", fake_run)
+        def read(self):
+            return b'{"choices":[{"message":{"content":"{\\"ok\\":true}"}}]}'
 
-    assert _default_runner(arguments, "private prompt") == '{"ok":true}'
-    assert calls == [
-        (
-            [*arguments, "--file", str(prompt_paths[0])],
-            {
-                "capture_output": True,
-                "text": True,
-                "encoding": "utf-8",
-                "errors": "strict",
-                "shell": False,
-                "check": False,
-            },
-        )
-    ]
-    assert prompt_paths[0].exists() is False
+    def fake_urlopen(request, timeout):
+        calls.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr("scripts.fuse_prompt_package.urlopen", fake_urlopen)
+
+    assert _default_http_runner("http://127.0.0.1:18089", "private prompt") == '{"ok":true}'
+    assert calls[0][0].full_url == "http://127.0.0.1:18089/v1/chat/completions"
+    body = json.loads(calls[0][0].data)
+    assert body["messages"][-1]["content"] == "private prompt"
+    assert body["response_format"] == {"type": "json_object"}
+    assert calls[0][1] == 3600
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
@@ -463,8 +532,7 @@ def test_fuse_rejects_secret_like_inputs_before_calling_the_runner():
             target_engine={"name": "Seedance", "parameters": {"api_key": "not-allowed"}},
             mode="reconstruction",
             generated_at="2026-08-09T10:00:00Z",
-            llama_executable="D:/private/llama-cli.exe",
-            model_path="D:/private/qwen.gguf",
+            server_url="http://127.0.0.1:18089",
             runner=runner,
         )
     assert called is False
@@ -582,7 +650,6 @@ def test_fuse_rejects_sensitive_metadata_before_calling_runner(
             target_engine={"name": "Seedance", "parameters": {"duration_seconds": 1}},
             mode=mode,
             generated_at=generated_at,
-            llama_executable="D:/private/llama-cli.exe",
-            model_path="D:/private/qwen.gguf",
+            server_url="http://127.0.0.1:18089",
             runner=forbidden_runner,
         )

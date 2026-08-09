@@ -7,11 +7,11 @@ Use this checklist per shot and across the full sequence. Anchor every statement
 Use a two-pass source-closure recipe:
 
 1. **Source draft:** Draft all six complete prompts from facts explicitly present in `skycaptioner`, `general_vlm`, `asr_ocr`, or `human_context`, plus owner-local `conservative inferred choice` or `creative choice` atoms. Do not claim closure yet.
-2. **Final atomization:** Freeze the final prompt wording. Split every clause in every prompt into atomic occurrences and build or expand the inventory from the final text: `fact_id | prompt_ref | normalized atom | owner section | source stream | evidence_refs | status`.
+2. **Final atomization:** Freeze the final prompt wording. Separate atomic occurrences with semicolons and build the `attribution.entries` inventory from the final text: `fact_id | prompt_ref | atom | owner section | source stream | source_ref | source_quote | evidence_refs | status`.
 
 Atoms include every identity, attribute, adjective, color, count, direction, location, action phase, gaze path, expression, pose, focus property, light color, pacing, duration, and edit declaration. One row covers one atom occurrence only; never hide multiple details in a composite row. Every final prompt atom maps to exactly one row, and every row maps back to exactly one prompt occurrence.
 
-For each `source-supported` row, the atom appears verbatim or equivalently in its named stream with evidence references. For each inferred or creative row, `source stream` is `none` and the same status appears inside the owner section. Reviews, anchors, summaries, and inventory references alone cannot replace the named-stream text.
+For each `source-supported` row, the atom contains an exact `source_quote` from its named source record plus matching evidence references. For each inferred or creative row, `source stream` is `none` and the same status appears inside the owner section. Reviews, anchors, summaries, and inventory references alone cannot replace the named-stream text.
 
 Claim `source-closed` only after both directions pass. Otherwise list unmatched or invalid atoms and report `attribution incomplete` and `partial`.
 

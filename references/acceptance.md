@@ -211,3 +211,23 @@ Round 11 is partial/FAIL on the single exhaustive source-closure gate. Draft fro
 Overall Task 8 status is `partial`: real structural analysis and the local H3 loop ran end to end, while automatic strict prompt-package delivery and production visual/audio quality remain open. Evidence and outputs stay under the private task directory and are not committed.
 
 Post-Task-8 deterministic verification: 133 repository tests pass, the Skill validator passes, and `git diff --check` is clean.
+
+## Task 9 HTTP fusion and source-closure hardening
+
+- PASS: fusion moved from mixed `llama-cli` stdout to loopback `llama-server` HTTP. The adapter reads only `choices[0].message.content`; runtime banners and logs no longer contaminate the strict parser.
+- PASS: model-facing prompts now use structured eight-section atom arrays. The controller renders final prompt strings and derives the attribution ledger, so final line shape and one-row-per-atom coverage are deterministic.
+- PASS: deterministic validation rejects missing/null sections, empty or semicolon-containing atoms, missing/duplicate attribution rows, invalid source references, source quotes absent from their records, mismatched evidence references, and unlabelled inferred/creative atoms.
+- PARTIAL: the final authorized real 32B run returned a complete 44,084-byte JSON response without HTTP or process failure, but its draft violated the contract: it added a model-authored top-level attribution object, left the I2V and enhanced prompt sections null, duplicated an invalid source-path value across both negative categories, and omitted engine compatibility notes. The strict gate rejected it and no formal prompt package was written.
+- STOP BOUNDARY: the raw response and failure log were retained in the private task directory. Per the bounded acceptance plan, no third model generation or fresh-agent review round was run.
+
+Task 9 therefore remains `partial`: the transport and deterministic source-closure architecture are fixed and covered by tests, but this 32B model has not yet produced one complete valid structured fusion draft on the real acceptance input.
+
+## Task 10 bounded reassembly from the saved four-stage run
+
+- PASS: the saved real response contains all four completed stages: base, I2V, enhanced, and variants. No model, HTTP service, SkyCaptioner, ComfyUI workflow, or video generation was rerun.
+- PASS: the controller now admits `supported` as `source-supported` only when exact quote, namespaced source record, and evidence references close. Unsupported claims are retained as explicitly labelled conservative inference without false provenance; creative atoms are normalized to owner-local null-source records.
+- PASS: the controller replaced the three unchanged model variants with actual single-variable CAMERA, LIGHTING, and TIMING changes; added a task-local first-frame role to the copied I2V draft; made the copied enhanced draft materially different; and replaced implementation-oriented negatives with source-fidelity and generation-stability constraints.
+- PASS: the saved raw response was deterministically reassembled and passed the shipped strict package validator. Formal `prompt-package.json` and derived `prompt-package.md` were written to the private task directory. The resulting ledger contains 9 source-supported, 30 conservative-inferred, and 11 creative atom occurrences.
+- BOUNDARY: this passes transport, structured delivery, source-closure, I2V presence, enhanced presence, and single-variable package gates. The earlier H3 shot-007 rendered-similarity and quiet-audio findings remain partial; this reassembly does not claim full-video reproduction or production visual quality.
+
+Task 10 closes automatic strict prompt-package delivery for this acceptance source without another 32B run. Remaining partial status belongs to generated-video similarity/audio quality, not to package construction.

@@ -13,14 +13,14 @@ from scripts.validate_prompt_package import loads_strict_json, validate_prompt_p
 def complete_prompt(label: str) -> str:
     return "\n".join(
         (
-            f"SUBJECT: {label} subject with fixed wardrobe and appearance.",
-            "ACTION: Performs the full visible action from start to finish.",
-            "SCENE: Defined environment, props, spatial relationships, and background.",
-            "CAMERA: Shot size, angle, lens behavior, movement, and composition.",
-            "LIGHTING: Direction, quality, color, atmosphere, and visual style.",
-            "TIMING: Ordered beats and duration for the complete shot.",
-            "AUDIO: Dialogue, sound effects, ambience, and synchronization.",
-            "CONSTRAINTS: Preserve anchors and avoid all listed negative constraints.",
+            f"SUBJECT: creative choice: {label} subject with fixed wardrobe and appearance.",
+            "ACTION: creative choice: performs the full visible action from start to finish.",
+            "SCENE: creative choice: defined environment, props, spatial relationships, and background.",
+            "CAMERA: creative choice: shot size, angle, lens behavior, movement, and composition.",
+            "LIGHTING: creative choice: direction, quality, color, atmosphere, and visual style.",
+            "TIMING: creative choice: ordered beats and duration for the complete shot.",
+            "AUDIO: creative choice: dialogue, sound effects, ambience, and synchronization.",
+            "CONSTRAINTS: creative choice: preserve anchors and avoid all listed negative constraints.",
         )
     )
 
@@ -32,9 +32,40 @@ def replace_prompt_section(prompt: str, section: str, value: str) -> str:
     )
 
 
+def build_creative_attribution(prompts: dict) -> dict:
+    prompt_values = [
+        ("reconstruction_t2v", prompts["reconstruction_t2v"]),
+        ("reconstruction_i2v", prompts["reconstruction_i2v"]),
+        ("enhanced", prompts["enhanced"]),
+        *[
+            (f"variant_{index}", variant["prompt"])
+            for index, variant in enumerate(prompts["single_variable_variants"], start=1)
+        ],
+    ]
+    entries = []
+    for prompt_name, prompt in prompt_values:
+        for line in prompt.splitlines():
+            section, value = line.split(":", 1)
+            for atom_index, atom in enumerate(value.strip().split(";"), start=1):
+                entries.append(
+                    {
+                        "fact_id": f"fact-{len(entries) + 1:04d}",
+                        "prompt_ref": f"{prompt_name}.{section}.{atom_index:03d}",
+                        "atom": atom.strip(),
+                        "owner_section": section,
+                        "source_stream": "none",
+                        "source_ref": None,
+                        "source_quote": None,
+                        "evidence_refs": [],
+                        "status": "creative",
+                    }
+                )
+    return {"status": "source-closed", "entries": entries}
+
+
 def valid_package() -> dict:
     reconstruction_t2v = complete_prompt("reconstruction T2V")
-    return {
+    package = {
         "metadata": {"mode": "reconstruction", "generated_at": "2026-08-09T10:00:00Z"},
         "media": {"duration_seconds": 4.0, "width": 1920, "height": 1080, "fps": 24.0},
         "shots": [
@@ -68,7 +99,7 @@ def valid_package() -> dict:
                     "prompt": replace_prompt_section(
                         reconstruction_t2v,
                         "CAMERA",
-                        "A slow tracking move replaces the static reconstruction camera.",
+                        "creative choice: a slow tracking move replaces the static reconstruction camera.",
                     ),
                 },
                 {
@@ -76,7 +107,7 @@ def valid_package() -> dict:
                     "prompt": replace_prompt_section(
                         reconstruction_t2v,
                         "LIGHTING",
-                        "Warm sunset side light replaces the neutral reconstruction lighting.",
+                        "creative choice: warm sunset side light replaces the neutral reconstruction lighting.",
                     ),
                 },
                 {
@@ -84,7 +115,7 @@ def valid_package() -> dict:
                     "prompt": replace_prompt_section(
                         reconstruction_t2v,
                         "TIMING",
-                        "The same beats unfold at half speed for the complete shot.",
+                        "creative choice: the same beats unfold at half speed for the complete shot.",
                     ),
                 },
             ],
@@ -101,6 +132,8 @@ def valid_package() -> dict:
         },
         "uncertainties": ["The sampled frames do not prove the exact focal length."],
     }
+    package["attribution"] = build_creative_attribution(package["prompts"])
+    return package
 
 
 def test_validate_requires_exactly_the_five_named_review_roles():
@@ -158,7 +191,8 @@ def test_validate_requires_every_prompt_to_be_complete_and_standalone():
     """Accepting a blank section or a variant that says 'same as above' must break this test."""
     incomplete = deepcopy(valid_package())
     incomplete["prompts"]["enhanced"] = incomplete["prompts"]["enhanced"].replace(
-        "AUDIO: Dialogue, sound effects, ambience, and synchronization.\n", ""
+        "AUDIO: creative choice: dialogue, sound effects, ambience, and synchronization.\n",
+        "",
     )
     with pytest.raises(ValueError, match="enhanced.*AUDIO"):
         validate_prompt_package(incomplete)
@@ -181,13 +215,14 @@ def test_validate_requires_every_prompt_to_be_complete_and_standalone():
     [
         lambda prompt: prompt + "\nSUBJECT: Duplicate subject.",
         lambda prompt: prompt.replace(
-            "SUBJECT: reconstruction T2V subject with fixed wardrobe and appearance.\n"
-            "ACTION: Performs the full visible action from start to finish.",
-            "ACTION: Performs the full visible action from start to finish.\n"
-            "SUBJECT: reconstruction T2V subject with fixed wardrobe and appearance.",
+            "SUBJECT: creative choice: reconstruction T2V subject with fixed wardrobe and appearance.\n"
+            "ACTION: creative choice: performs the full visible action from start to finish.",
+            "ACTION: creative choice: performs the full visible action from start to finish.\n"
+            "SUBJECT: creative choice: reconstruction T2V subject with fixed wardrobe and appearance.",
         ),
         lambda prompt: prompt.replace(
-            "AUDIO: Dialogue, sound effects, ambience, and synchronization.", "AUDIO:   "
+            "AUDIO: creative choice: dialogue, sound effects, ambience, and synchronization.",
+            "AUDIO:   ",
         ),
     ],
 )
@@ -576,6 +611,44 @@ def test_loads_strict_json_rejects_overflow_float():
     """Parsing an overflowing JSON number as infinity must break the strict input boundary."""
     with pytest.raises(ValueError, match="strict JSON"):
         loads_strict_json('{"nested":[{"score":1e999}]}')
+
+
+def test_validate_requires_bijective_source_attribution_for_every_prompt_atom():
+    """A missing atom row or unsupported source quote must prevent source-closed delivery."""
+    package = valid_package()
+    entry = package["attribution"]["entries"][0]
+    entry.update(
+        {
+            "source_stream": "general_vlm",
+            "source_ref": "general_vlm:shot-001",
+            "source_quote": "reconstruction T2V subject",
+            "evidence_refs": ["evidence/shot-001-entry.jpg"],
+            "status": "source-supported",
+        }
+    )
+    source_inputs = {
+        "skycaptioner": [],
+        "general_vlm": [
+            {
+                "observation": "reconstruction T2V subject",
+                "evidence_refs": ["evidence/shot-001-entry.jpg"],
+            }
+        ],
+        "asr_ocr": [],
+        "human_context": [],
+    }
+
+    validate_prompt_package(package, source_inputs=source_inputs)
+
+    missing = deepcopy(package)
+    del missing["attribution"]["entries"][0]
+    with pytest.raises(ValueError, match="exactly one attribution row"):
+        validate_prompt_package(missing, source_inputs=source_inputs)
+
+    unsupported = deepcopy(package)
+    unsupported["attribution"]["entries"][0]["source_quote"] = "not in the source"
+    with pytest.raises(ValueError, match="source quote"):
+        validate_prompt_package(unsupported, source_inputs=source_inputs)
 
 
 @pytest.mark.parametrize("invalid_kind", ["duplicate", "nan", "overflow"])

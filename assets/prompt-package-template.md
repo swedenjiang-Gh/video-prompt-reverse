@@ -62,3 +62,9 @@
 # Uncertainties
 
 {uncertainties}
+
+# Prompt Attribution
+
+- Status: {attribution_status}
+
+{attribution_entries}
