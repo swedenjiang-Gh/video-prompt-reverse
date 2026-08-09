@@ -59,3 +59,19 @@ The authorized fresh-agent rerun recorded these portable results:
 - FAIL: the UI default prompt invoked `$video-prompt-reverse` directly instead of entering through `$media-studio-orchestrator` first.
 
 Round 2 is partial and does not pass the Task 6 Skill behavior gate. A fresh-agent rerun must prove orchestrator-first entry and semantic compatibility between each changed section and all seven unchanged sections. Real model execution, strict machine fusion/validation, generation similarity, and production quality remain outside this evidence boundary.
+
+## Task 6 forward-test round 3
+
+The authorized fresh-agent rerun recorded these portable results:
+
+- PASS: the route entered through `media-studio-orchestrator` before selecting `video-learning` and `video-prompt-reverse`.
+- PASS: `skycaptioner`, `general_vlm`, `asr_ocr`, and `human_context` remained separate, with empty streams explicit.
+- PASS: all five professional roles were present.
+- PASS: reconstruction T2V, reconstruction I2V, and enhanced prompts were present.
+- PASS: all three variants were standalone prompts with all eight canonical sections in order. They changed only `CAMERA`, `LIGHTING`, and `ACTION`, respectively.
+- PASS: every unchanged section remained semantically compatible with its variant. Baseline `TIMING` required neither camera reframing nor an exact gesture, so the locked-camera and changed-action variants introduced no cross-section contradiction.
+- PASS: source-reconstruction and generation-stability negatives remained separate.
+- PASS: no model was downloaded or executed and no generation task was submitted.
+- PASS: strict model-backed fusion, prompt-package JSON validation, generation similarity, and production quality were explicitly reported as pending.
+
+Round 3 passes the Task 6 Skill behavior gate for these fields. It does not establish real model execution, strict machine fusion/validation, generated-video similarity, or production quality.
