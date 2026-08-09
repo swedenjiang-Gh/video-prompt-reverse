@@ -102,9 +102,9 @@ An independent neutral fresh-agent run with no prior implementation or review co
 - PASS: `skycaptioner`, `general_vlm`, `asr_ocr`, and `human_context` remained explicit and separate, including empty streams for steps that were not run.
 - PASS: all five professional roles were present.
 - PASS: reconstruction T2V, reconstruction I2V, and enhanced prompts were present.
-- PASS: the baseline sections obeyed canonical ownership. `SCENE` contained neutral environment and props, `CAMERA` owned framing, motion, focus, and depth, `LIGHTING` contained illumination only, and `TIMING` contained duration, pacing, and cuts only.
-- PASS: the three standalone variants each contained all eight canonical sections and changed only `CAMERA`, `LIGHTING`, or `ACTION`, respectively. Each changed section remained semantically compatible with all seven unchanged sections.
+- FAIL: the baseline did not obey exact canonical ownership. `CAMERA` repeated a no-cut rule already owned by `TIMING`, and `SCENE` repeated a readable-text prohibition already owned by `CONSTRAINTS`.
+- PARTIAL: the three standalone variants each contained all eight canonical sections and changed only `CAMERA`, `LIGHTING`, or `ACTION`, respectively. Their changed sections remained semantically compatible with the seven unchanged sections, but every variant cloned the two baseline ownership duplicates.
 - PASS: source-reconstruction and generation-stability negatives remained separate.
 - PASS: the proof boundary remained explicit. Standard model-backed fusion, strict prompt-package JSON validation, model execution, generated-video similarity, and production quality were reported as pending; no model was downloaded or executed and no generation task was submitted.
 
-Round 5 passes the Task 6 fresh-agent Skill behavior gate for cross-section ownership and single-variable semantic compatibility. It does not establish runtime model fusion, strict machine validation, executable generation, visual similarity, or production quality; those remain separate acceptance gates.
+Round 5 is partial/FAIL and does not pass the Task 6 fresh-agent Skill behavior gate for cross-section ownership. The ownership guidance now assigns all cut/editing declarations only to `TIMING` and all readable-text prohibitions only to `CONSTRAINTS`; a new independent fresh-agent rerun must demonstrate those boundaries before this gate can pass. Runtime model fusion, strict machine validation, executable generation, visual similarity, and production quality remain separate acceptance gates.
