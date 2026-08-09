@@ -93,3 +93,18 @@ The authorized fresh-agent rerun recorded these portable results:
 - PARTIAL: the expected evidence-extraction script root was unavailable, so the standard runtime pipeline was not rerun. The authorized source and previously saved evidence were rechecked instead.
 
 Round 4 is partial and does not pass the cross-section semantic lint field. A fresh-agent rerun must show that every baseline clause has exactly one owner and remains compatible with all unchanged variant sections. Runtime evidence extraction, real model-backed fusion, strict machine validation, generated-video similarity, and production quality remain outside this acceptance boundary.
+
+## Task 6 forward-test round 5
+
+An independent neutral fresh-agent run with no prior implementation or review context recorded these portable results:
+
+- PASS: the route entered through `media-studio-orchestrator` before selecting `video-prompt-reverse`.
+- PASS: `skycaptioner`, `general_vlm`, `asr_ocr`, and `human_context` remained explicit and separate, including empty streams for steps that were not run.
+- PASS: all five professional roles were present.
+- PASS: reconstruction T2V, reconstruction I2V, and enhanced prompts were present.
+- PASS: the baseline sections obeyed canonical ownership. `SCENE` contained neutral environment and props, `CAMERA` owned framing, motion, focus, and depth, `LIGHTING` contained illumination only, and `TIMING` contained duration, pacing, and cuts only.
+- PASS: the three standalone variants each contained all eight canonical sections and changed only `CAMERA`, `LIGHTING`, or `ACTION`, respectively. Each changed section remained semantically compatible with all seven unchanged sections.
+- PASS: source-reconstruction and generation-stability negatives remained separate.
+- PASS: the proof boundary remained explicit. Standard model-backed fusion, strict prompt-package JSON validation, model execution, generated-video similarity, and production quality were reported as pending; no model was downloaded or executed and no generation task was submitted.
+
+Round 5 passes the Task 6 fresh-agent Skill behavior gate for cross-section ownership and single-variable semantic compatibility. It does not establish runtime model fusion, strict machine validation, executable generation, visual similarity, or production quality; those remain separate acceptance gates.
