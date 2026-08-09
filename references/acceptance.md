@@ -30,3 +30,16 @@ The Skill must retain the baseline's evidence and uncertainty discipline while p
 - Task 5: four-source fusion and strict prompt-package validation pass 106 focused tests; the repository's post-Task-5 full suite passes 131 tests.
 
 These results establish deterministic unit and contract behavior only. Fresh-agent Skill behavior is a Task 6 controller gate. Real SkyCaptioner/Qwen execution and MiniMax H3 or other generation acceptance remain pending Tasks 7 and 8; executable smoke, visual similarity, and production quality are not yet proven.
+
+## Task 6 forward-test round 1
+
+The authorized fresh-agent run recorded these fields:
+
+- PASS: orchestrator routing, authorization, and declared fixed-interval fallback.
+- PASS: four source streams remained separate, including explicit empty streams.
+- PASS: all five professional roles were present.
+- PASS: source-reconstruction and generation-stability negatives remained separate.
+- PASS: uncertainty and validation boundaries were explicit; no model execution or strict-validator result was claimed.
+- FAIL: each single-variable variant was only a replacement section plus a reference to seven unchanged baseline sections, not a complete standalone eight-section prompt.
+
+The Skill now requires every variant to print the full canonical prompt with exactly its mapped section changed. A controller-owned fresh-agent rerun is required before recording this field as PASS.

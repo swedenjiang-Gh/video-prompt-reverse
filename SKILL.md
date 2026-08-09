@@ -23,6 +23,8 @@ Never submit a local or cloud generation task silently.
 8. Deliver validated JSON and its derived Markdown. Keep source-fidelity and generation-stability negatives separate; retain uncertainties.
 9. Offer the user a generation route: MiniMax H3, Wan/local, Seedance/cloud, another engine, or no generation. Treat local-versus-cloud and H3-versus-Wan as user choices.
 
+Print every single-variable variant as a complete standalone prompt with all eight canonical sections in order. Copy the seven unchanged sections in full from `reconstruction_t2v`; change exactly the section mapped by `changed_dimension`. Never deliver a replacement line, ellipsis, baseline reference, `same as above`, or `other sections unchanged` shorthand.
+
 Use the shipped scripts for deterministic work; inspect their interfaces instead of reproducing code, schemas, or commands here.
 
 ## Evidence and proof boundaries
