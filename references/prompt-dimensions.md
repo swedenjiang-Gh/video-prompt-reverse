@@ -2,6 +2,14 @@
 
 Use this checklist per shot and across the full sequence. Anchor every statement to timestamped evidence or a named source stream; mark inference and uncertainty instead of filling gaps.
 
+## Source closure
+
+Before reviews or prompts, create a fact inventory with one atomic row per fact: `fact_id | normalized fact | owner section | source stream | evidence_refs | status`. Status is exactly `source-supported`, `conservative inferred choice`, or `creative choice`. Every fact in `SUBJECT`, `ACTION`, `SCENE`, `CAMERA`, `LIGHTING`, `TIMING`, and `AUDIO` maps to one row. Source-supported facts must be explicitly present in `skycaptioner`, `general_vlm`, `asr_ocr`, or `human_context`; inferred or creative facts use `source stream: none` and carry the matching label inside their owner section. Reviews, anchors, and summaries cannot serve as source streams.
+
+Treat every detail as its own fact. A broad observation such as `bedroom scene` does not source earrings, necklaces, garments, prop state, layout, pose, depth of field, or illumination. Enumerate each supported detail with evidence references or omit it.
+
+Declare the actual authorized I2V image before `reconstruction_i2v`: `I2V input asset: <portable evidence or input-asset path>; role: first-frame|reference; authorization: approved`. If no approved image exists, write `I2V input asset: no approved reference image supplied`, make the I2V prompt conditional, and make no input-lock claim.
+
 ## Analysis and reconstruction checklist
 
 | Dimension | Inspect and preserve |
@@ -68,7 +76,7 @@ Write each role's review as a concrete contribution to reconstruction, not a res
 - Prefer corroboration across entry/peak/exit frames or adjacent shots for motion and continuity claims.
 - Treat a fixed-interval fallback as lower-confidence temporal coverage and declare it.
 - Keep SkyCaptioner structural observations, general VLM observations, ASR/OCR, and human context individually attributable until fusion. Label current controller/agent frame inspection as `controller/general-VLM observation` in `general_vlm`. Use `human_context` only when an explicitly identified human record supplied the fact; do not relabel agent/model observation as human.
-- Admit a visual identity, accessory, garment, prop attribute, pose, or state to a prompt only after an equivalent observation appears in a named source stream with an evidence reference. Otherwise omit it.
+- Admit a prompt fact only through the fact inventory. Every source-supported identity, accessory, garment, prop attribute, pose, state, camera, or lighting fact points to its explicit named-stream observation and evidence reference; otherwise mark it as an owner-local conservative/creative choice or omit it.
 - Preserve contradictions. State which source supports each alternative and what evidence would resolve it.
 - Use explicit uncertainty for occluded identity, unreadable text, inaudible speech, ambiguous lens choice, hidden action, or unsupported physics.
 - Describe only observable source fidelity in reconstruction prompts. Put intentional creative changes in the enhanced prompt or a declared single-variable variant.

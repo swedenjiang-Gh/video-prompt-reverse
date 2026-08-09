@@ -160,3 +160,14 @@ The authorized no-model/no-validator fresh-agent rerun recorded these portable r
 - PASS: no model, validator, generation, rendered similarity, or production-quality result was claimed.
 
 Round 9 is partial/FAIL. Prompt facts must be admitted through a named source, fixed-frame action bridges must be qualified inside `ACTION`, semantic payload must have one owner, unchanged sections must be lighting-neutral, negative categories must remain disjoint, and the five generation-route choices must be offered without execution. A new independent fresh-agent rerun must demonstrate these behaviors before Task 6 can pass.
+
+## Task 6 forward-test round 10
+
+The authorized no-model/no-validator fresh-agent rerun recorded these portable results:
+
+- PASS: 12 of 13 Task 6 behavior gates passed, including routing, four separate source namespaces, fixed-frame inference labels, five roles, complete prompts/variants, single-owner semantics, lighting-neutral unchanged sections, unresolved audio, enhanced ownership, disjoint negative classes, five route options, and honest proof boundaries.
+- FAIL: prompt identity, accessory, garment, prop, layout, depth-of-field, and lighting facts were not individually closed to named-stream observations with evidence references. Five-role notes could not substitute for missing source records.
+- FAIL within the same source-closure gate: `reconstruction_i2v` claimed a supplied approved reference image without identifying an actual authorized evidence frame/input asset and its first-frame/reference role.
+- NOT EVALUATED: strict JSON, model, shipped-validator, generation, similarity, and production-quality execution remain Task 8 gates and were not treated as Task 6 blockers.
+
+Round 10 is partial/FAIL on the single source-closure gate. Before prompt drafting, every atomic fact must map through an auditable inventory to a named source or an owner-local conservative/creative label. I2V must name its approved input image path and role, or explicitly state that no approved reference image was supplied and avoid lock claims. A new independent fresh-agent rerun must demonstrate this closure before Task 6 can pass.
