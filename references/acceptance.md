@@ -42,4 +42,18 @@ The authorized fresh-agent run recorded these fields:
 - PASS: uncertainty and validation boundaries were explicit; no model execution or strict-validator result was claimed.
 - FAIL: each single-variable variant was only a replacement section plus a reference to seven unchanged baseline sections, not a complete standalone eight-section prompt.
 
-The Skill now requires every variant to print the full canonical prompt with exactly its mapped section changed. A controller-owned fresh-agent rerun is required before recording this field as PASS.
+The Skill now requires every variant to print the full canonical prompt with exactly its mapped section changed. Round 2 below closes this field.
+
+## Task 6 forward-test round 2
+
+The authorized fresh-agent rerun recorded these portable results:
+
+- PASS: `skycaptioner`, `general_vlm`, `asr_ocr`, and `human_context` remained separate, with all empty streams explicit.
+- PASS: all five professional roles were present.
+- PASS: reconstruction T2V, reconstruction I2V, and enhanced prompts were present.
+- PASS: all three single-variable variants were standalone prompts with all eight canonical sections in order; each changed only its declared mapped section from reconstruction T2V.
+- PASS: source-reconstruction and generation-stability negatives remained separate.
+- PASS: no model was downloaded or executed and no generation task was submitted.
+- PASS: strict machine fusion and prompt-package validation were explicitly reported as pending, not inferred from static analysis.
+
+Round 2 passes the Task 6 Skill behavior gate for these fields. Real model execution, strict machine fusion/validation, generation similarity, and production quality remain outside this evidence boundary.
