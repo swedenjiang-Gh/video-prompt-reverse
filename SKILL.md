@@ -25,13 +25,17 @@ Never submit a local or cloud generation task silently.
 
 Print every single-variable variant as a complete standalone prompt with all eight canonical sections in order. Copy the seven unchanged sections in full from `reconstruction_t2v`; change exactly the section mapped by `changed_dimension`. Never deliver a replacement line, ellipsis, baseline reference, `same as above`, or `other sections unchanged` shorthand.
 
-Before writing any complete prompt, read [canonical prompt section ownership](references/prompt-dimensions.md#canonical-prompt-section-ownership). Lint every clause in `reconstruction_t2v`, `reconstruction_i2v`, `enhanced`, and each variant. Put event emergence, state changes, interactions, and reactions in `ACTION`; static environment and props in `SCENE`; emitted illumination, exposure, and shadows in `LIGHTING`; and only duration, pacing, cuts, edits, and transitions in `TIMING`.
+Before writing any complete prompt, read [canonical prompt section ownership](references/prompt-dimensions.md#canonical-prompt-section-ownership). Lint every clause in `reconstruction_t2v`, `reconstruction_i2v`, `enhanced`, and each variant. Put affirmative event emergence, state changes, interactions, and reactions in `ACTION`; static environment and props in `SCENE`; emitted illumination, exposure, and shadows in `LIGHTING`; and only duration, pacing, cuts, edits, and transitions in `TIMING`.
 
 Before cloning variants, rewrite `reconstruction_t2v` until every clause has exactly one owner. If changing another dimension could make a clause false, move it to that dimension's section. Reject a variant if any unchanged section restates or requires the changed action, camera, lighting, or timing.
 
 Build reconstruction `AUDIO` only from resolved audio evidence. When source audio is unresolved, keep it unresolved with an action-independent boundary such as `source audio unresolved; no verified dialogue, music, ambience, or synchronized effects`. Clone that boundary unchanged into variants. If an action change also needs a synchronized sound, classify it as an `AUDIO` change or a separate creative prompt, not an `ACTION`-only variant.
 
+When reconstruction uses fixed-interval frames or empty event intervals, write only observed endpoint framing in `CAMERA` and supported duration or pacing in `TIMING`. If generation needs an interpolated bridge, label it inside the owning section: `conservative inferred reconstruction choice; exact camera mechanism unresolved` in `CAMERA`, and `conservative inferred reconstruction choice; cuts/transitions unresolved` in `TIMING`. An external uncertainty list does not turn an unlabelled continuous move or no-cut instruction into source evidence.
+
 Put every cut, edit, transition, shot-count, or single-take clause—including a prohibition such as no cuts—only in `TIMING`, never in `CAMERA`. Put every readable-text prohibition only in `CONSTRAINTS`, never in `SCENE`; `SCENE` may name a book or page as a prop without assigning its text a legibility rule. Remove the original clause after moving it so no ownership duplicate remains.
+
+Write enhanced `ACTION` as affirmative event behavior. Put every non-occlusion requirement, including not obscuring eyes, faces, or hands, only in `CONSTRAINTS`; remove it from `ACTION`.
 
 Use the shipped scripts for deterministic work; inspect their interfaces instead of reproducing code, schemas, or commands here.
 

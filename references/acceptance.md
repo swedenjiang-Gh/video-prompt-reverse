@@ -120,3 +120,15 @@ The authorized fresh-agent rerun recorded these portable results:
 - PASS: no model-backed fusion, strict JSON validation, generation, rendered similarity, or production-quality result was claimed.
 
 Round 6c is partial/FAIL and does not pass the source-evidence or canonical-ownership behavior gates. Reconstruction audio must remain explicitly unresolved until evidence resolves it, and the clause-ownership lint must pass independently for reconstruction, enhanced, and variant prompts. A new independent fresh-agent rerun must demonstrate both behaviors before Task 6 can pass.
+
+## Task 6 forward-test round 7
+
+The authorized fresh-agent rerun recorded these portable results:
+
+- PASS: orchestrator routing, four separate source streams, five-role review, complete reconstruction/enhanced prompts, standalone single-variable variants, unresolved reconstruction audio, separated negative categories, and proof-level boundaries remained explicit.
+- PASS: the earlier cut/readable-text and reconstruction-audio ownership fixes remained intact.
+- FAIL: fixed-coverage frames and empty event intervals established only sampled framing states, but reconstruction `CAMERA` prescribed a definite continuous tightening and `TIMING` prescribed a definite single take with no cut. Those instructions were not marked inside their sections as conservative inferred choices with unresolved mechanism/cuts.
+- FAIL: enhanced `ACTION` included a non-occlusion prohibition that was also present in `CONSTRAINTS`; non-occlusion is owned only by `CONSTRAINTS`.
+- PASS: no model-backed fusion, strict JSON validation, generation, rendered similarity, or production-quality result was claimed.
+
+Round 7 is partial/FAIL and does not pass the reconstruction-evidence or exact-ownership behavior gates. Fixed-coverage interpolation must be omitted or qualified inside `CAMERA` and `TIMING`, and enhanced non-occlusion requirements must appear only in `CONSTRAINTS`. A new independent fresh-agent rerun must demonstrate both behaviors before Task 6 can pass.
