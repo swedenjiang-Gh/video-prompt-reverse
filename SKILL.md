@@ -25,6 +25,8 @@ Never submit a local or cloud generation task silently.
 
 Print every single-variable variant as a complete standalone prompt with all eight canonical sections in order. Copy the seven unchanged sections in full from `reconstruction_t2v`; change exactly the section mapped by `changed_dimension`. Never deliver a replacement line, ellipsis, baseline reference, `same as above`, or `other sections unchanged` shorthand.
 
+Before producing variants, localize each variable's semantics in `reconstruction_t2v` to its mapped section. Keep the other seven sections semantically compatible with both the baseline and the changed section. A variant is invalid if an unchanged section still requires the old camera, lighting, timing, or action behavior; repair the baseline section boundaries before emitting variants.
+
 Use the shipped scripts for deterministic work; inspect their interfaces instead of reproducing code, schemas, or commands here.
 
 ## Evidence and proof boundaries
