@@ -20,30 +20,42 @@ The top-level object has exactly these fields:
 - `five_role_review`: exactly `screenwriter`, `director`, `cinematographer`,
   `production_designer`, and `editor`, each with a non-empty review.
 - `prompts`: complete `reconstruction_t2v`, `reconstruction_i2v`, and `enhanced` strings plus
-  exactly three `single_variable_variants`. Every prompt is standalone and contains `SUBJECT`,
-  `ACTION`, `SCENE`, `CAMERA`, `LIGHTING`, `TIMING`, `AUDIO`, and `CONSTRAINTS` sections. Each
-  variant has exactly `changed_dimension` and `prompt`, and the three dimensions are unique.
-- `engine`: exactly `name`, non-empty scalar `parameters`, and `compatibility_notes`. CLI-style
-  engine flags are forbidden in prompt prose.
+  exactly three `single_variable_variants`. Every prompt has exactly one ordered, non-empty line
+  for `SUBJECT`, `ACTION`, `SCENE`, `CAMERA`, `LIGHTING`, `TIMING`, `AUDIO`, and `CONSTRAINTS`.
+  Variant dimensions are restricted by the canonical dimension-to-section map; each complete
+  variant must differ from `reconstruction_t2v` only in its declared section.
+- `engine`: exactly `name`, non-empty finite scalar `parameters`, and `compatibility_notes`.
+  CLI-style engine flags are forbidden in prompt prose.
 - `anchors`: a non-empty list of continuity anchors.
 - `negative_constraints`: exactly separate `reconstruction_source` and `generation_stability`
-  lists. Fidelity limits must not be collapsed into generation-stability negatives.
+  lists. Fidelity limits must not be collapsed into generation-stability negatives, and the two
+  lists must remain disjoint after Unicode, case, whitespace, and punctuation normalization.
 - `uncertainties`: a list of explicit uncertainties; it may be empty when none remain.
 
-The model response must be one bare JSON object. Markdown fences, prefix/suffix prose, malformed
-JSON, missing or extra fields, invalid timestamps, provenance loss, and mismatches with the
-requested metadata/engine are rejected.
+The model response and every Task 5 JSON/JSONL file boundary use the same strict parser. Duplicate
+keys, `NaN`/infinities, Markdown fences, prefix/suffix prose, malformed JSON, missing or extra
+fields, invalid timestamps, provenance loss, and mismatches with the requested metadata/engine
+are rejected. Strict serialization uses `allow_nan=False`.
+
+The model-facing instruction embeds `PROMPT_PACKAGE_CONTRACT`, the same dependency-light canonical
+contract from which validator field sets, source namespaces, roles, prompt sections, dimension
+mapping, and variant count are derived. The contract also enumerates all binding leaf types and
+cross-field invariants.
 
 ## Privacy and invocation
 
-Raw secret-like keys or values, authorization material, absolute/private machine paths, and
-parent-traversing evidence references are rejected recursively. The llama.cpp adapter passes an
-argument list directly to `subprocess.run` with the prompt on stdin; it does not use a shell or
-print the prompt, executable path, model path, stdout, or stderr. An injected runner is used by
-tests. Dry-run builds the deterministic request and a redacted argument template without process
-startup.
+One recursive gate runs before instruction construction, dry-run output, or runner invocation and
+again on the fused package. It rejects semantic credential keys and common credential values,
+including `github_pat_...`, plus absolute/private roots; harmless metadata such as `token_count`
+is allowed. The llama.cpp adapter passes an argument list directly to `subprocess.run` with the
+prompt on stdin; it does not use a shell or print the prompt, executable path, model path, stdout,
+or stderr. An injected runner is used by tests. Dry-run builds the deterministic request and a
+redacted argument template without process startup.
 
 ## Markdown
 
-`assets/prompt-package-template.md` is filled from validated JSON only. Evidence is represented as
-clickable relative Markdown links; source media is never copied into the package.
+`assets/prompt-package-template.md` is filled from validated JSON only. Evidence references reject
+URI schemes, drive-like colons, controls, traversal, non-portable filename characters, and malformed
+local path segments while accepting normal nested relative paths. Link targets are URL-encoded;
+labels, headings, structural text, and list values are Markdown-escaped. Source media is never copied
+into the package.

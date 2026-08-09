@@ -1,74 +1,48 @@
 """Fuse separated observations into a strict prompt package."""
 
 import argparse
-import json
 import subprocess
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 try:
-    from scripts.validate_prompt_package import reject_secret_like_content, validate_prompt_package
+    from scripts.validate_prompt_package import (
+        dumps_strict_json,
+        load_strict_json,
+        loads_strict_json,
+        PROMPT_PACKAGE_CONTRACT,
+        reject_sensitive_content,
+        validate_prompt_package,
+    )
 except ModuleNotFoundError:  # Direct script execution.
-    from validate_prompt_package import reject_secret_like_content, validate_prompt_package
+    from validate_prompt_package import (
+        dumps_strict_json,
+        load_strict_json,
+        loads_strict_json,
+        PROMPT_PACKAGE_CONTRACT,
+        reject_sensitive_content,
+        validate_prompt_package,
+    )
 
-SOURCE_NAMESPACES = ("skycaptioner", "general_vlm", "asr_ocr", "human_context")
+SOURCE_NAMESPACES = tuple(PROMPT_PACKAGE_CONTRACT["objects"]["sources"])
 Runner = Callable[[list[str], str], str]
-OUTPUT_CONTRACT = {
-    "top_level_fields": [
-        "metadata",
-        "media",
-        "shots",
-        "sources",
-        "five_role_review",
-        "prompts",
-        "engine",
-        "anchors",
-        "negative_constraints",
-        "uncertainties",
-    ],
-    "metadata": ["mode", "generated_at"],
-    "media": ["duration_seconds", "width", "height", "fps"],
-    "shot_fields": ["id", "timestamps", "evidence_refs", "description"],
-    "sources": list(SOURCE_NAMESPACES),
-    "five_role_review": [
-        "screenwriter",
-        "director",
-        "cinematographer",
-        "production_designer",
-        "editor",
-    ],
-    "prompts": {
-        "required": ["reconstruction_t2v", "reconstruction_i2v", "enhanced"],
-        "single_variable_variant_count": 3,
-        "variant_fields": ["changed_dimension", "prompt"],
-        "standalone_sections": [
-            "SUBJECT",
-            "ACTION",
-            "SCENE",
-            "CAMERA",
-            "LIGHTING",
-            "TIMING",
-            "AUDIO",
-            "CONSTRAINTS",
-        ],
-    },
-    "engine": ["name", "parameters", "compatibility_notes"],
-    "negative_constraints": ["reconstruction_source", "generation_stability"],
-    "strict_json": "one bare object with no prefix, suffix, or fences",
-}
 
 
 def load_records(path: Path) -> list[dict]:
     """Load a JSON object/array or JSONL records from a local observation file."""
     raw = path.read_text(encoding="utf-8")
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
+        parsed = loads_strict_json(raw)
+    except ValueError:
+        lines = [line for line in raw.splitlines() if line.strip()]
+        if len(lines) < 2:
+            raise
         try:
-            parsed = [json.loads(line) for line in raw.splitlines() if line.strip()]
-        except json.JSONDecodeError:
-            raise ValueError("observation input must be JSON or JSONL") from None
+            parsed = [loads_strict_json(line) for line in lines]
+        except ValueError:
+            raise ValueError("observation input must be strict JSON or JSONL") from None
     records = parsed if isinstance(parsed, list) else [parsed]
     if any(not isinstance(record, dict) for record in records):
         raise ValueError("observation input must contain JSON objects")
@@ -114,7 +88,7 @@ def build_fusion_instruction(
             "Do not merge source namespaces. Copy only the required provenance references into sources.",
             "Do not emit credentials, private machine roots, model paths, or parameter flags in prompt prose.",
             "PACKAGE_METADATA_JSON",
-            json.dumps(
+            dumps_strict_json(
                 {"mode": mode, "generated_at": generated_at},
                 ensure_ascii=False,
                 sort_keys=True,
@@ -122,16 +96,27 @@ def build_fusion_instruction(
             ),
             "END_PACKAGE_METADATA_JSON",
             "OUTPUT_CONTRACT_JSON",
-            json.dumps(OUTPUT_CONTRACT, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            dumps_strict_json(
+                PROMPT_PACKAGE_CONTRACT,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             "END_OUTPUT_CONTRACT_JSON",
             "EVIDENCE_MANIFEST_JSON",
-            json.dumps(evidence_manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            dumps_strict_json(
+                evidence_manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ),
             "END_EVIDENCE_MANIFEST_JSON",
             "SOURCE_INPUTS_JSON",
-            json.dumps(sources, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            dumps_strict_json(
+                sources, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ),
             "END_SOURCE_INPUTS_JSON",
             "TARGET_ENGINE_JSON",
-            json.dumps(target_engine, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            dumps_strict_json(
+                target_engine, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ),
             "END_TARGET_ENGINE_JSON",
         )
     )
@@ -139,24 +124,9 @@ def build_fusion_instruction(
 
 def extract_strict_json_object(raw_output: str) -> dict:
     """Accept only one bare JSON object, with no model commentary or fences."""
-    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("duplicate JSON field")
-            result[key] = value
-        return result
-
-    def reject_non_finite_number(value: str) -> None:
-        raise ValueError(f"non-finite JSON number: {value}")
-
     try:
-        package = json.loads(
-            raw_output,
-            object_pairs_hook=reject_duplicate_keys,
-            parse_constant=reject_non_finite_number,
-        )
-    except (TypeError, ValueError):
+        package = loads_strict_json(raw_output)
+    except ValueError:
         raise ValueError("model output must contain exactly one JSON object") from None
     if not isinstance(package, dict):
         raise ValueError("model output must contain exactly one JSON object")
@@ -216,7 +186,7 @@ def prepare_fusion_dry_run(
         "asr_ocr": asr_ocr,
         "human_context": human_context,
     }
-    reject_secret_like_content(
+    reject_sensitive_content(
         {
             "evidence_manifest": evidence_manifest,
             "sources": source_inputs,
@@ -235,7 +205,9 @@ def prepare_fusion_dry_run(
         generated_at=generated_at,
     )
     instruction += "\nREQUIRED_SOURCE_REFERENCES_JSON\n"
-    instruction += json.dumps(required_sources, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    instruction += dumps_strict_json(
+        required_sources, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     instruction += "\nEND_REQUIRED_SOURCE_REFERENCES_JSON"
     return {
         "mode": "dry-run",
@@ -284,8 +256,36 @@ def fuse_prompt_package(
     return package
 
 
+MARKDOWN_SPECIAL = frozenset("\\`*{}[]<>_#+-.!|()")
+
+
+def _markdown_escape(value: object) -> str:
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    escaped = []
+    for character in text:
+        if character == "\n":
+            escaped.append("&#10;")
+        elif character == "\t":
+            escaped.append("&#9;")
+        elif ord(character) < 32 or ord(character) == 127:
+            escaped.append("�")
+        elif character in MARKDOWN_SPECIAL:
+            escaped.append("\\" + character)
+        else:
+            escaped.append(character)
+    return "".join(escaped)
+
+
+def _markdown_code_block(value: str) -> str:
+    return "\n".join(f"    {line}" for line in value.splitlines())
+
+
 def _markdown_list(values: list[str]) -> str:
-    return "\n".join(f"- {value}" for value in values) if values else "- None recorded."
+    return (
+        "\n".join(f"- {_markdown_escape(value)}" for value in values)
+        if values
+        else "- None recorded."
+    )
 
 
 def render_prompt_package(package: dict, template_path: Path | None = None) -> str:
@@ -297,45 +297,50 @@ def render_prompt_package(package: dict, template_path: Path | None = None) -> s
     shot_sections = []
     for shot in package["shots"]:
         evidence = "\n".join(
-            f"  - [{reference}](<{reference}>)" for reference in shot["evidence_refs"]
+            f"  - [{_markdown_escape(reference)}](<{quote(reference, safe='/')}>)"
+            for reference in shot["evidence_refs"]
         )
         shot_sections.append(
             "\n".join(
                 (
-                    f"## {shot['id']}",
+                    f"## {_markdown_escape(shot['id'])}",
                     "",
                     f"- Time: {shot['timestamps']['start']} s to {shot['timestamps']['end']} s",
-                    f"- Description: {shot['description']}",
+                    f"- Description: {_markdown_escape(shot['description'])}",
                     "- Evidence:",
                     evidence,
                 )
             )
         )
     sources = "\n\n".join(
-        f"## {namespace}\n\n{_markdown_list(references)}"
+        f"## {_markdown_escape(namespace)}\n\n{_markdown_list(references)}"
         for namespace, references in package["sources"].items()
     )
-    role_reviews = _markdown_list(
-        [f"**{role}:** {review}" for role, review in package["five_role_review"].items()]
+    role_reviews = "\n".join(
+        f"- **{_markdown_escape(role)}:** {_markdown_escape(review)}"
+        for role, review in package["five_role_review"].items()
     )
     variants = "\n\n".join(
-        f"### {variant['changed_dimension']}\n\n{variant['prompt']}"
+        f"### {_markdown_escape(variant['changed_dimension'])}\n\n"
+        f"{_markdown_code_block(variant['prompt'])}"
         for variant in package["prompts"]["single_variable_variants"]
     )
     values = {
-        "mode": package["metadata"]["mode"],
-        "generated_at": package["metadata"]["generated_at"],
+        "mode": _markdown_escape(package["metadata"]["mode"]),
+        "generated_at": _markdown_escape(package["metadata"]["generated_at"]),
         **package["media"],
         "shots": "\n\n".join(shot_sections),
         "sources": sources,
         "five_role_review": role_reviews,
-        "reconstruction_t2v": package["prompts"]["reconstruction_t2v"],
-        "reconstruction_i2v": package["prompts"]["reconstruction_i2v"],
-        "enhanced": package["prompts"]["enhanced"],
+        "reconstruction_t2v": _markdown_code_block(package["prompts"]["reconstruction_t2v"]),
+        "reconstruction_i2v": _markdown_code_block(package["prompts"]["reconstruction_i2v"]),
+        "enhanced": _markdown_code_block(package["prompts"]["enhanced"]),
         "single_variable_variants": variants,
-        "engine_name": package["engine"]["name"],
-        "engine_parameters": json.dumps(
-            package["engine"]["parameters"], ensure_ascii=False, indent=2, sort_keys=True
+        "engine_name": _markdown_escape(package["engine"]["name"]),
+        "engine_parameters": _markdown_code_block(
+            dumps_strict_json(
+                package["engine"]["parameters"], ensure_ascii=False, indent=2, sort_keys=True
+            )
         ),
         "compatibility_notes": _markdown_list(package["engine"]["compatibility_notes"]),
         "anchors": _markdown_list(package["anchors"]),
@@ -357,7 +362,7 @@ def write_prompt_package(package: dict, output_dir: Path) -> tuple[Path, Path]:
     json_path = output_dir / "prompt-package.json"
     markdown_path = output_dir / "prompt-package.md"
     json_path.write_text(
-        json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        dumps_strict_json(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     markdown_path.write_text(markdown, encoding="utf-8")
     return json_path, markdown_path
@@ -388,8 +393,8 @@ def main() -> None:
     if not args.dry_run and (not args.llama_executable or not args.model_path):
         parser.error("--llama-executable and --model-path are required unless --dry-run is used")
 
-    evidence_manifest = json.loads(args.evidence_manifest.read_text(encoding="utf-8"))
-    target_engine = json.loads(args.target_engine.read_text(encoding="utf-8"))
+    evidence_manifest = load_strict_json(args.evidence_manifest)
+    target_engine = load_strict_json(args.target_engine)
     generated_at = args.generated_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
     inputs = {
         "evidence_manifest": evidence_manifest,
@@ -407,7 +412,7 @@ def main() -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "fusion-dry-run.json"
         output_path.write_text(
-            json.dumps(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            dumps_strict_json(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         print(output_path)
         return

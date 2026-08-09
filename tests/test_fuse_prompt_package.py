@@ -75,7 +75,7 @@ def test_build_source_references_assigns_stable_namespaced_provenance_ids():
 
 
 def test_build_instruction_embeds_the_machine_readable_output_contract():
-    """Omitting a required output field from the fusion request must break this test."""
+    """Shorthand model instructions must not omit binding fields, types, or invariants."""
     instruction = build_fusion_instruction(
         evidence_manifest={"media": {"duration_seconds": 1.0}, "shots": []},
         skycaptioner=[],
@@ -92,31 +92,112 @@ def test_build_instruction_embeds_the_machine_readable_output_contract():
         )[0]
     )
 
-    assert contract["sources"] == [
-        "skycaptioner",
-        "general_vlm",
-        "asr_ocr",
-        "human_context",
+    assert contract["objects"] == {
+        "prompt_package": [
+            "metadata",
+            "media",
+            "shots",
+            "sources",
+            "five_role_review",
+            "prompts",
+            "engine",
+            "anchors",
+            "negative_constraints",
+            "uncertainties",
+        ],
+        "metadata": ["mode", "generated_at"],
+        "media": ["duration_seconds", "width", "height", "fps"],
+        "shot": ["id", "timestamps", "evidence_refs", "description"],
+        "timestamps": ["start", "end"],
+        "sources": ["skycaptioner", "general_vlm", "asr_ocr", "human_context"],
+        "five_role_review": [
+            "screenwriter",
+            "director",
+            "cinematographer",
+            "production_designer",
+            "editor",
+        ],
+        "prompts": [
+            "reconstruction_t2v",
+            "reconstruction_i2v",
+            "enhanced",
+            "single_variable_variants",
+        ],
+        "single_variable_variant": ["changed_dimension", "prompt"],
+        "engine": ["name", "parameters", "compatibility_notes"],
+        "negative_constraints": ["reconstruction_source", "generation_stability"],
+    }
+    assert contract["types"] == {
+        "metadata.mode": "non-empty string",
+        "metadata.generated_at": "timezone-aware ISO 8601 string",
+        "media.duration_seconds": "positive finite number",
+        "media.width": "positive integer",
+        "media.height": "positive integer",
+        "media.fps": "positive finite number",
+        "shots": "non-empty array of shot objects",
+        "shot.id": "unique non-empty string",
+        "shot.timestamps.start": "non-negative finite number",
+        "shot.timestamps.end": "positive finite number",
+        "shot.evidence_refs": "non-empty array of portable relative path strings",
+        "shot.description": "non-empty string",
+        "sources.*": "array of own-namespace reference strings",
+        "five_role_review.*": "non-empty string",
+        "prompts.reconstruction_t2v": "complete standalone prompt string",
+        "prompts.reconstruction_i2v": "complete standalone prompt string",
+        "prompts.enhanced": "complete standalone prompt string",
+        "prompts.single_variable_variants": "array of exactly 3 variant objects",
+        "single_variable_variant.changed_dimension": "unique allowed dimension string",
+        "single_variable_variant.prompt": "complete standalone prompt string",
+        "engine.name": "non-empty string",
+        "engine.parameters": "non-empty object of named finite scalar values",
+        "engine.compatibility_notes": "array of non-empty strings",
+        "anchors": "non-empty array of non-empty strings",
+        "negative_constraints.*": "non-empty array of non-empty strings",
+        "uncertainties": "array of non-empty strings",
+    }
+    assert contract["prompt_format"] == {
+        "ordered_sections": [
+            "SUBJECT",
+            "ACTION",
+            "SCENE",
+            "CAMERA",
+            "LIGHTING",
+            "TIMING",
+            "AUDIO",
+            "CONSTRAINTS",
+        ],
+        "dimension_to_section": {
+            "subject": "SUBJECT",
+            "action": "ACTION",
+            "scene": "SCENE",
+            "camera": "CAMERA",
+            "camera_motion": "CAMERA",
+            "lighting": "LIGHTING",
+            "timing": "TIMING",
+            "audio": "AUDIO",
+            "constraints": "CONSTRAINTS",
+        },
+        "variant_baseline": "prompts.reconstruction_t2v",
+        "variant_count": 3,
+    }
+    assert contract["strict_json"] == (
+        "one bare RFC 8259 object; no duplicate keys, non-finite numbers, prefix, suffix, or fences"
+    )
+    assert contract["invariants"] == [
+        "all listed objects reject additional fields",
+        "metadata exactly matches the requested mode and generation time",
+        "media exactly matches the evidence manifest",
+        "shots preserve manifest order, timestamps, and evidence references",
+        "shot timestamps are chronological, non-overlapping, and within media bounds",
+        "sources exactly match required own-namespace references",
+        "each variant changes exactly its declared section from reconstruction_t2v",
+        "engine name and parameters match the target engine",
+        "engine parameters are structured scalars and absent from prompt prose",
+        "negative categories are non-empty and normalized-disjoint",
+        "credentials and private roots are forbidden before and after fusion",
+        "evidence references are portable local relative paths",
+        "Markdown is rendered from validated data only",
     ]
-    assert contract["five_role_review"] == [
-        "screenwriter",
-        "director",
-        "cinematographer",
-        "production_designer",
-        "editor",
-    ]
-    assert contract["prompts"]["single_variable_variant_count"] == 3
-    assert contract["prompts"]["standalone_sections"] == [
-        "SUBJECT",
-        "ACTION",
-        "SCENE",
-        "CAMERA",
-        "LIGHTING",
-        "TIMING",
-        "AUDIO",
-        "CONSTRAINTS",
-    ]
-    assert contract["strict_json"] == "one bare object with no prefix, suffix, or fences"
 
 
 def test_fuse_uses_injected_runner_with_argument_array_then_validates_output(capsys):
@@ -199,11 +280,32 @@ def test_write_outputs_json_and_markdown_only_after_validation(tmp_path):
     assert markdown_path.name == "prompt-package.md"
     assert json.loads(json_path.read_text(encoding="utf-8")) == valid_package()
     markdown = markdown_path.read_text(encoding="utf-8")
-    assert "[evidence/shot-001-entry.jpg](<evidence/shot-001-entry.jpg>)" in markdown
+    assert r"[evidence/shot\-001\-entry\.jpg](<evidence/shot-001-entry.jpg>)" in markdown
     assert "## Reconstruction T2V" in markdown
     assert "## Reconstruction I2V" in markdown
     assert "## Enhanced" in markdown
-    assert "camera_motion" in markdown
+    assert r"camera\_motion" in markdown
+
+
+def test_markdown_encodes_evidence_targets_and_escapes_structural_text(tmp_path):
+    """Raw Markdown insertion would turn brackets, newlines, or fragments into active structure."""
+    package = valid_package()
+    package["shots"][0]["evidence_refs"] = ["evidence/final [frame] #1.jpg"]
+    package["shots"][0]["description"] = "A [label](https://example.test)\n# injected heading"
+    package["five_role_review"]["editor"] = "> quote [cut]"
+    package["anchors"] = ["- nested item"]
+
+    _, markdown_path = write_prompt_package(package, tmp_path)
+    markdown = markdown_path.read_text(encoding="utf-8")
+
+    assert (
+        "[evidence/final \\[frame\\] \\#1\\.jpg]"
+        "(<evidence/final%20%5Bframe%5D%20%231.jpg>)"
+    ) in markdown
+    assert "A \\[label\\]\\(https://example\\.test\\)&#10;\\# injected heading" in markdown
+    assert "\\> quote \\[cut\\]" in markdown
+    assert "\\- nested item" in markdown
+    assert "\n# injected heading" not in markdown
 
 
 def test_prepare_dry_run_builds_the_request_without_runner_or_private_paths():
@@ -251,6 +353,37 @@ def test_load_records_accepts_json_arrays_objects_and_skycaptioner_jsonl(tmp_pat
     assert load_records(array_path) == [{"id": "one"}, {"id": "two"}]
     assert load_records(object_path) == [{"project": "launch"}]
     assert load_records(jsonl_path) == [{"shot_id": "one"}, {"shot_id": "two"}]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"id":"one","id":"two"}',
+        '{"score":NaN}',
+    ],
+)
+def test_load_records_rejects_duplicate_keys_and_non_finite_json(tmp_path, raw):
+    """Falling back from invalid JSON to permissive JSONL must not bypass strict parsing."""
+    path = tmp_path / "observations.json"
+    path.write_text(raw, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="strict JSON"):
+        load_records(path)
+
+
+def test_instruction_serialization_rejects_non_finite_source_values():
+    """Allowing json.dumps to emit NaN would send non-standard JSON to the model."""
+    with pytest.raises(ValueError, match="strict JSON"):
+        build_fusion_instruction(
+            evidence_manifest={"media": {"duration_seconds": 1.0}, "shots": []},
+            skycaptioner=[{"confidence": float("nan")}],
+            general_vlm=[],
+            asr_ocr=[],
+            human_context=[],
+            target_engine={"name": "Seedance", "parameters": {"duration_seconds": 1}},
+            mode="reconstruction",
+            generated_at="2026-08-09T10:00:00Z",
+        )
 
 
 def test_default_runner_passes_an_argument_array_and_prompt_stdin_without_shell(
@@ -318,3 +451,60 @@ def test_fuse_rejects_secret_like_inputs_before_calling_the_runner():
             runner=runner,
         )
     assert called is False
+
+
+def test_prepare_allows_legitimate_token_count_metadata():
+    """Substring matching on 'token' would reject harmless engine capacity metadata."""
+    request = prepare_fusion_dry_run(
+        evidence_manifest={"media": {"duration_seconds": 1.0}, "shots": []},
+        skycaptioner=[],
+        general_vlm=[],
+        asr_ocr=[],
+        human_context=[],
+        target_engine={
+            "name": "Seedance",
+            "parameters": {"duration_seconds": 1, "token_count": 128},
+        },
+        mode="reconstruction",
+        generated_at="2026-08-09T10:00:00Z",
+    )
+
+    assert request["mode"] == "dry-run"
+
+
+@pytest.mark.parametrize(
+    ("evidence_manifest", "human_context", "message"),
+    [
+        (
+            {
+                "media": {
+                    "video_path": "C:/Users/J/private/reference.mp4",
+                    "duration_seconds": 1.0,
+                },
+                "shots": [],
+            },
+            [],
+            "private path",
+        ),
+        (
+            {"media": {"duration_seconds": 1.0}, "shots": []},
+            [{"note": "github_pat_abcdefghijklmnopqrstuvwxyz123456"}],
+            "secret-like value",
+        ),
+    ],
+)
+def test_prepare_rejects_private_roots_and_common_credentials_before_instruction(
+    evidence_manifest, human_context, message
+):
+    """A dry-run request must not serialize sensitive inputs before checking them."""
+    with pytest.raises(ValueError, match=message):
+        prepare_fusion_dry_run(
+            evidence_manifest=evidence_manifest,
+            skycaptioner=[],
+            general_vlm=[],
+            asr_ocr=[],
+            human_context=human_context,
+            target_engine={"name": "Seedance", "parameters": {"duration_seconds": 1}},
+            mode="reconstruction",
+            generated_at="2026-08-09T10:00:00Z",
+        )

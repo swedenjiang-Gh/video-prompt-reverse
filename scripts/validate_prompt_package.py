@@ -2,41 +2,168 @@
 
 import argparse
 import json
+import math
 import re
+import unicodedata
 from datetime import datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 
-FIVE_ROLES = {
-    "screenwriter",
-    "director",
-    "cinematographer",
-    "production_designer",
-    "editor",
+PROMPT_PACKAGE_CONTRACT = {
+    "objects": {
+        "prompt_package": [
+            "metadata",
+            "media",
+            "shots",
+            "sources",
+            "five_role_review",
+            "prompts",
+            "engine",
+            "anchors",
+            "negative_constraints",
+            "uncertainties",
+        ],
+        "metadata": ["mode", "generated_at"],
+        "media": ["duration_seconds", "width", "height", "fps"],
+        "shot": ["id", "timestamps", "evidence_refs", "description"],
+        "timestamps": ["start", "end"],
+        "sources": ["skycaptioner", "general_vlm", "asr_ocr", "human_context"],
+        "five_role_review": [
+            "screenwriter",
+            "director",
+            "cinematographer",
+            "production_designer",
+            "editor",
+        ],
+        "prompts": [
+            "reconstruction_t2v",
+            "reconstruction_i2v",
+            "enhanced",
+            "single_variable_variants",
+        ],
+        "single_variable_variant": ["changed_dimension", "prompt"],
+        "engine": ["name", "parameters", "compatibility_notes"],
+        "negative_constraints": ["reconstruction_source", "generation_stability"],
+    },
+    "types": {
+        "metadata.mode": "non-empty string",
+        "metadata.generated_at": "timezone-aware ISO 8601 string",
+        "media.duration_seconds": "positive finite number",
+        "media.width": "positive integer",
+        "media.height": "positive integer",
+        "media.fps": "positive finite number",
+        "shots": "non-empty array of shot objects",
+        "shot.id": "unique non-empty string",
+        "shot.timestamps.start": "non-negative finite number",
+        "shot.timestamps.end": "positive finite number",
+        "shot.evidence_refs": "non-empty array of portable relative path strings",
+        "shot.description": "non-empty string",
+        "sources.*": "array of own-namespace reference strings",
+        "five_role_review.*": "non-empty string",
+        "prompts.reconstruction_t2v": "complete standalone prompt string",
+        "prompts.reconstruction_i2v": "complete standalone prompt string",
+        "prompts.enhanced": "complete standalone prompt string",
+        "prompts.single_variable_variants": "array of exactly 3 variant objects",
+        "single_variable_variant.changed_dimension": "unique allowed dimension string",
+        "single_variable_variant.prompt": "complete standalone prompt string",
+        "engine.name": "non-empty string",
+        "engine.parameters": "non-empty object of named finite scalar values",
+        "engine.compatibility_notes": "array of non-empty strings",
+        "anchors": "non-empty array of non-empty strings",
+        "negative_constraints.*": "non-empty array of non-empty strings",
+        "uncertainties": "array of non-empty strings",
+    },
+    "prompt_format": {
+        "ordered_sections": [
+            "SUBJECT",
+            "ACTION",
+            "SCENE",
+            "CAMERA",
+            "LIGHTING",
+            "TIMING",
+            "AUDIO",
+            "CONSTRAINTS",
+        ],
+        "dimension_to_section": {
+            "subject": "SUBJECT",
+            "action": "ACTION",
+            "scene": "SCENE",
+            "camera": "CAMERA",
+            "camera_motion": "CAMERA",
+            "lighting": "LIGHTING",
+            "timing": "TIMING",
+            "audio": "AUDIO",
+            "constraints": "CONSTRAINTS",
+        },
+        "variant_baseline": "prompts.reconstruction_t2v",
+        "variant_count": 3,
+    },
+    "strict_json": (
+        "one bare RFC 8259 object; no duplicate keys, non-finite numbers, prefix, suffix, or fences"
+    ),
+    "invariants": [
+        "all listed objects reject additional fields",
+        "metadata exactly matches the requested mode and generation time",
+        "media exactly matches the evidence manifest",
+        "shots preserve manifest order, timestamps, and evidence references",
+        "shot timestamps are chronological, non-overlapping, and within media bounds",
+        "sources exactly match required own-namespace references",
+        "each variant changes exactly its declared section from reconstruction_t2v",
+        "engine name and parameters match the target engine",
+        "engine parameters are structured scalars and absent from prompt prose",
+        "negative categories are non-empty and normalized-disjoint",
+        "credentials and private roots are forbidden before and after fusion",
+        "evidence references are portable local relative paths",
+        "Markdown is rendered from validated data only",
+    ],
 }
-PACKAGE_FIELDS = {
-    "metadata",
-    "media",
-    "shots",
-    "sources",
-    "five_role_review",
-    "prompts",
-    "engine",
-    "anchors",
-    "negative_constraints",
-    "uncertainties",
-}
-PROMPT_SECTIONS = ("SUBJECT", "ACTION", "SCENE", "CAMERA", "LIGHTING", "TIMING", "AUDIO", "CONSTRAINTS")
-SOURCE_NAMESPACES = {"skycaptioner", "general_vlm", "asr_ocr", "human_context"}
-SECRET_KEY = re.compile(
-    r"api[_-]?key|token|password|secret|cookie|credential|authorization", re.IGNORECASE
-)
+
+PACKAGE_FIELDS = set(PROMPT_PACKAGE_CONTRACT["objects"]["prompt_package"])
+FIVE_ROLES = set(PROMPT_PACKAGE_CONTRACT["objects"]["five_role_review"])
+PROMPT_SECTIONS = tuple(PROMPT_PACKAGE_CONTRACT["prompt_format"]["ordered_sections"])
+PROMPT_DIMENSION_SECTIONS = PROMPT_PACKAGE_CONTRACT["prompt_format"]["dimension_to_section"]
+SOURCE_NAMESPACES = set(PROMPT_PACKAGE_CONTRACT["objects"]["sources"])
 SECRET_VALUE = re.compile(
     r"(?:\bBearer\s+\S+|\bsk-[A-Za-z0-9_-]{12,}|\bhf_[A-Za-z0-9]{15,}|"
+    r"\bgithub_pat_[A-Za-z0-9_]{20,}|"
     r"\b(?:api[_-]?key|token|password|secret|cookie|authorization)\s*[:=]\s*\S+)",
     re.IGNORECASE,
 )
 PRIVATE_PATH = re.compile(r"(?:\b[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|file://|/(?:home|Users)/)")
+
+
+def loads_strict_json(raw: str) -> object:
+    """Parse one standards-compliant JSON value without duplicate object keys."""
+    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON field")
+            result[key] = value
+        return result
+
+    def reject_non_finite_number(value: str) -> None:
+        raise ValueError(f"non-finite JSON number: {value}")
+
+    try:
+        return json.loads(
+            raw,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_non_finite_number,
+        )
+    except (TypeError, ValueError):
+        raise ValueError("input must contain exactly one strict JSON value") from None
+
+
+def load_strict_json(path: Path) -> object:
+    return loads_strict_json(path.read_text(encoding="utf-8"))
+
+
+def dumps_strict_json(value: object, **kwargs: object) -> str:
+    try:
+        return json.dumps(value, allow_nan=False, **kwargs)
+    except (TypeError, ValueError):
+        raise ValueError("value cannot be represented as strict JSON") from None
 
 
 def _require_exact_keys(value: object, expected: set[str], location: str) -> dict:
@@ -51,52 +178,101 @@ def _require_exact_keys(value: object, expected: set[str], location: str) -> dic
     return value
 
 
-def _validate_complete_prompt(value: object, location: str) -> None:
+def _validate_complete_prompt(value: object, location: str) -> dict[str, str]:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{location} must be a non-empty string")
-    for section in PROMPT_SECTIONS:
-        if f"{section}:" not in value:
-            raise ValueError(f"{location} is missing {section}")
     if re.search(r"(?m)(?:^|\s)--[a-z][a-z0-9-]*\b", value, re.IGNORECASE):
         raise ValueError(f"{location} contains engine parameter syntax")
+    parsed = []
+    for line in value.splitlines():
+        match = re.fullmatch(r"([A-Z][A-Z0-9_ ]*):[ \t]*(.*)", line)
+        if match is None:
+            parsed.append(("", ""))
+        else:
+            parsed.append((match.group(1), match.group(2).strip()))
+    if (
+        [section for section, _ in parsed] != list(PROMPT_SECTIONS)
+        or any(not section_value for _, section_value in parsed)
+    ):
+        expected = ", ".join(PROMPT_SECTIONS)
+        raise ValueError(f"{location} sections must be exactly ordered and non-empty: {expected}")
+    return dict(parsed)
 
 
 def _number(value: object, location: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{location} must be a number")
-    return float(value)
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{location} must be finite")
+    return number
 
 
-def reject_secret_like_content(value: object) -> None:
-    """Reject credential-shaped keys or values without exposing their contents."""
+def _is_portable_evidence_reference(reference: str) -> bool:
+    if (
+        "\\" in reference
+        or ":" in reference
+        or reference.startswith("/")
+        or reference.startswith("./")
+        or reference.endswith("/")
+        or "//" in reference
+        or re.search(r"[<>\"|?*]", reference)
+        or any(ord(character) < 32 or ord(character) == 127 for character in reference)
+    ):
+        return False
+    parts = reference.split("/")
+    return all(part not in {"", ".", ".."} for part in parts)
+
+
+def _normalize_constraint(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"[\W_]+", " ", normalized).strip()
+
+
+def _is_secret_key(key: str) -> bool:
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key)
+    parts = [part for part in re.split(r"[^a-z0-9]+", normalized.lower()) if part]
+    if not parts:
+        return False
+    if "".join(parts) in {
+        "apikey",
+        "accesstoken",
+        "authtoken",
+        "bearertoken",
+        "privatekey",
+        "clientsecret",
+    }:
+        return True
+    if any(
+        part in {"password", "passwd", "secret", "cookie", "credential", "authorization"}
+        for part in parts
+    ):
+        return True
+    if parts[-1] == "token":
+        return True
+    pairs = set(zip(parts, parts[1:]))
+    return ("api", "key") in pairs or ("private", "key") in pairs
+
+
+def reject_sensitive_content(value: object) -> None:
+    """Reject credential-shaped content and private roots without exposing values."""
     if isinstance(value, dict):
         for key, child in value.items():
-            if isinstance(key, str) and SECRET_KEY.search(key):
+            if isinstance(key, str) and _is_secret_key(key):
                 raise ValueError("prompt package contains a secret-like key")
-            reject_secret_like_content(child)
+            reject_sensitive_content(child)
     elif isinstance(value, list):
         for child in value:
-            reject_secret_like_content(child)
+            reject_sensitive_content(child)
     elif isinstance(value, str):
         if SECRET_VALUE.search(value):
             raise ValueError("prompt package contains a secret-like value")
-
-
-def _scan_private_paths(value: object) -> None:
-    if isinstance(value, dict):
-        for child in value.values():
-            _scan_private_paths(child)
-    elif isinstance(value, list):
-        for child in value:
-            _scan_private_paths(child)
-    elif isinstance(value, str):
         if PRIVATE_PATH.search(value):
             raise ValueError("prompt package contains a private path")
 
 
 def _scan_for_leakage(value: object) -> None:
-    reject_secret_like_content(value)
-    _scan_private_paths(value)
+    reject_sensitive_content(value)
 
 
 def validate_prompt_package(
@@ -111,7 +287,9 @@ def validate_prompt_package(
     """Reject prompt packages that violate the strict output contract."""
     _scan_for_leakage(package)
     package = _require_exact_keys(package, PACKAGE_FIELDS, "prompt package")
-    metadata = _require_exact_keys(package["metadata"], {"mode", "generated_at"}, "metadata")
+    metadata = _require_exact_keys(
+        package["metadata"], set(PROMPT_PACKAGE_CONTRACT["objects"]["metadata"]), "metadata"
+    )
     if not isinstance(metadata["mode"], str) or not metadata["mode"].strip():
         raise ValueError("metadata.mode must be a non-empty string")
     if not isinstance(metadata["generated_at"], str):
@@ -128,7 +306,7 @@ def validate_prompt_package(
         raise ValueError("package does not preserve requested metadata")
     negatives = _require_exact_keys(
         package["negative_constraints"],
-        {"reconstruction_source", "generation_stability"},
+        set(PROMPT_PACKAGE_CONTRACT["objects"]["negative_constraints"]),
         "negative_constraints",
     )
     for category, values in negatives.items():
@@ -138,8 +316,16 @@ def validate_prompt_package(
             raise ValueError(
                 f"negative_constraints.{category} must be a non-empty list of strings"
             )
+    reconstruction_negatives = {
+        _normalize_constraint(value) for value in negatives["reconstruction_source"]
+    }
+    stability_negatives = {
+        _normalize_constraint(value) for value in negatives["generation_stability"]
+    }
+    if reconstruction_negatives & stability_negatives:
+        raise ValueError("negative constraint categories must not overlap")
     media = _require_exact_keys(
-        package["media"], {"duration_seconds", "width", "height", "fps"}, "media"
+        package["media"], set(PROMPT_PACKAGE_CONTRACT["objects"]["media"]), "media"
     )
     duration = _number(media["duration_seconds"], "media.duration_seconds")
     fps = _number(media["fps"], "media.fps")
@@ -167,7 +353,7 @@ def validate_prompt_package(
     shot_ids = set()
     for index, shot in enumerate(shots):
         shot = _require_exact_keys(
-            shot, {"id", "timestamps", "evidence_refs", "description"}, f"shot {index}"
+            shot, set(PROMPT_PACKAGE_CONTRACT["objects"]["shot"]), f"shot {index}"
         )
         if not isinstance(shot["id"], str) or not shot["id"].strip() or shot["id"] in shot_ids:
             raise ValueError("shot ids must be unique non-empty strings")
@@ -179,14 +365,13 @@ def validate_prompt_package(
             not isinstance(reference, str) or not reference.strip() for reference in references
         ):
             raise ValueError(f"shot {index}.evidence_refs must be a non-empty list of strings")
-        if any(
-            "\\" in reference
-            or PurePosixPath(reference).is_absolute()
-            or ".." in PurePosixPath(reference).parts
-            for reference in references
-        ):
+        if any(not _is_portable_evidence_reference(reference) for reference in references):
             raise ValueError(f"shot {index}.evidence_refs must use portable relative paths")
-        timestamps = _require_exact_keys(shot["timestamps"], {"start", "end"}, f"shot {index}.timestamps")
+        timestamps = _require_exact_keys(
+            shot["timestamps"],
+            set(PROMPT_PACKAGE_CONTRACT["objects"]["timestamps"]),
+            f"shot {index}.timestamps",
+        )
         start = _number(timestamps["start"], f"shot {index}.timestamps.start")
         end = _number(timestamps["end"], f"shot {index}.timestamps.end")
         if start < previous_start:
@@ -226,7 +411,7 @@ def validate_prompt_package(
             if shot["evidence_refs"] != expected_references:
                 raise ValueError("package evidence provenance does not match the manifest")
     engine = _require_exact_keys(
-        package["engine"], {"name", "parameters", "compatibility_notes"}, "engine"
+        package["engine"], set(PROMPT_PACKAGE_CONTRACT["objects"]["engine"]), "engine"
     )
     if not isinstance(engine["name"], str) or not engine["name"].strip():
         raise ValueError("engine.name must be a non-empty string")
@@ -243,6 +428,13 @@ def validate_prompt_package(
         for name, value in parameters.items()
     ):
         raise ValueError("engine.parameters must contain named scalar values")
+    if any(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and not math.isfinite(value)
+        for value in parameters.values()
+    ):
+        raise ValueError("engine.parameters must contain finite scalar values")
     notes = engine["compatibility_notes"]
     if not isinstance(notes, list) or any(
         not isinstance(note, str) or not note.strip() for note in notes
@@ -265,28 +457,48 @@ def validate_prompt_package(
 
     prompts = _require_exact_keys(
         package["prompts"],
-        {"reconstruction_t2v", "reconstruction_i2v", "enhanced", "single_variable_variants"},
+        set(PROMPT_PACKAGE_CONTRACT["objects"]["prompts"]),
         "prompts",
     )
-    for name in ("reconstruction_t2v", "reconstruction_i2v", "enhanced"):
+    baseline_sections = _validate_complete_prompt(
+        prompts["reconstruction_t2v"], "reconstruction_t2v"
+    )
+    for name in ("reconstruction_i2v", "enhanced"):
         _validate_complete_prompt(prompts[name], name)
     variants = prompts["single_variable_variants"]
-    if not isinstance(variants, list) or len(variants) != 3:
+    variant_count = PROMPT_PACKAGE_CONTRACT["prompt_format"]["variant_count"]
+    if not isinstance(variants, list) or len(variants) != variant_count:
         raise ValueError("prompts.single_variable_variants requires exactly three variants")
     dimensions = []
     for index, variant in enumerate(variants):
-        variant = _require_exact_keys(variant, {"changed_dimension", "prompt"}, f"variant {index}")
+        variant = _require_exact_keys(
+            variant,
+            set(PROMPT_PACKAGE_CONTRACT["objects"]["single_variable_variant"]),
+            f"variant {index}",
+        )
         dimension = variant["changed_dimension"]
         if not isinstance(dimension, str) or not dimension.strip():
             raise ValueError(f"variant {index}.changed_dimension must be a non-empty string")
-        _validate_complete_prompt(variant["prompt"], f"variant {index} prompt")
+        if dimension not in PROMPT_DIMENSION_SECTIONS:
+            raise ValueError("variant requires an allowed changed_dimension")
+        if dimension in dimensions:
+            raise ValueError("variants require a unique changed_dimension")
         dimensions.append(dimension)
-    if len(set(dimensions)) != 3:
-        raise ValueError("variants require a unique changed_dimension")
+        variant_sections = _validate_complete_prompt(variant["prompt"], f"variant {index} prompt")
+        differences = [
+            section
+            for section in PROMPT_SECTIONS
+            if variant_sections[section] != baseline_sections[section]
+        ]
+        declared_section = PROMPT_DIMENSION_SECTIONS[dimension]
+        if differences != [declared_section]:
+            raise ValueError(
+                f"variant {dimension} must change only {declared_section} from reconstruction_t2v"
+            )
 
 
 def _load_optional_json(path: Path | None) -> object | None:
-    return json.loads(path.read_text(encoding="utf-8")) if path is not None else None
+    return load_strict_json(path) if path is not None else None
 
 
 def main() -> None:
@@ -299,7 +511,7 @@ def main() -> None:
     parser.add_argument("--generated-at")
     args = parser.parse_args()
 
-    package = json.loads(args.prompt_package.read_text(encoding="utf-8"))
+    package = load_strict_json(args.prompt_package)
     validate_prompt_package(
         package,
         evidence_manifest=_load_optional_json(args.evidence_manifest),

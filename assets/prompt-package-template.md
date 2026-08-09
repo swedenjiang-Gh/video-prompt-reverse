@@ -1,7 +1,7 @@
 # Prompt Package
 
-- Mode: `{mode}`
-- Generated: `{generated_at}`
+- Mode: {mode}
+- Generated: {generated_at}
 - Media: {width}x{height}, {fps} fps, {duration_seconds} s
 
 # Shot Timeline
@@ -39,9 +39,7 @@
 - Name: {engine_name}
 - Parameters:
 
-```json
 {engine_parameters}
-```
 
 ## Compatibility Notes
 

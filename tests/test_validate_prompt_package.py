@@ -1,4 +1,9 @@
 from copy import deepcopy
+import json
+import math
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -20,7 +25,15 @@ def complete_prompt(label: str) -> str:
     )
 
 
+def replace_prompt_section(prompt: str, section: str, value: str) -> str:
+    return "\n".join(
+        f"{section}: {value}" if line.startswith(f"{section}:") else line
+        for line in prompt.splitlines()
+    )
+
+
 def valid_package() -> dict:
+    reconstruction_t2v = complete_prompt("reconstruction T2V")
     return {
         "metadata": {"mode": "reconstruction", "generated_at": "2026-08-09T10:00:00Z"},
         "media": {"duration_seconds": 4.0, "width": 1920, "height": 1080, "fps": 24.0},
@@ -46,13 +59,34 @@ def valid_package() -> dict:
             "editor": "Beat timing and continuity points are explicit.",
         },
         "prompts": {
-            "reconstruction_t2v": complete_prompt("reconstruction T2V"),
+            "reconstruction_t2v": reconstruction_t2v,
             "reconstruction_i2v": complete_prompt("reconstruction I2V"),
             "enhanced": complete_prompt("enhanced"),
             "single_variable_variants": [
-                {"changed_dimension": "camera_motion", "prompt": complete_prompt("camera variant")},
-                {"changed_dimension": "lighting", "prompt": complete_prompt("lighting variant")},
-                {"changed_dimension": "timing", "prompt": complete_prompt("timing variant")},
+                {
+                    "changed_dimension": "camera_motion",
+                    "prompt": replace_prompt_section(
+                        reconstruction_t2v,
+                        "CAMERA",
+                        "A slow tracking move replaces the static reconstruction camera.",
+                    ),
+                },
+                {
+                    "changed_dimension": "lighting",
+                    "prompt": replace_prompt_section(
+                        reconstruction_t2v,
+                        "LIGHTING",
+                        "Warm sunset side light replaces the neutral reconstruction lighting.",
+                    ),
+                },
+                {
+                    "changed_dimension": "timing",
+                    "prompt": replace_prompt_section(
+                        reconstruction_t2v,
+                        "TIMING",
+                        "The same beats unfold at half speed for the complete shot.",
+                    ),
+                },
             ],
         },
         "engine": {
@@ -140,6 +174,56 @@ def test_validate_requires_every_prompt_to_be_complete_and_standalone():
     blank["prompts"]["reconstruction_i2v"] = " "
     with pytest.raises(ValueError, match="reconstruction_i2v.*non-empty"):
         validate_prompt_package(blank)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda prompt: prompt + "\nSUBJECT: Duplicate subject.",
+        lambda prompt: prompt.replace(
+            "SUBJECT: reconstruction T2V subject with fixed wardrobe and appearance.\n"
+            "ACTION: Performs the full visible action from start to finish.",
+            "ACTION: Performs the full visible action from start to finish.\n"
+            "SUBJECT: reconstruction T2V subject with fixed wardrobe and appearance.",
+        ),
+        lambda prompt: prompt.replace(
+            "AUDIO: Dialogue, sound effects, ambience, and synchronization.", "AUDIO:   "
+        ),
+    ],
+)
+def test_validate_requires_exactly_one_ordered_non_empty_value_per_prompt_section(mutate):
+    """Substring checks would accept duplicate, reordered, or empty prompt sections."""
+    package = valid_package()
+    package["prompts"]["reconstruction_t2v"] = mutate(
+        package["prompts"]["reconstruction_t2v"]
+    )
+
+    with pytest.raises(ValueError, match="reconstruction_t2v.*sections"):
+        validate_prompt_package(package)
+
+
+def test_validate_single_variable_variants_change_only_the_declared_section():
+    """Schema-only variant checks would accept a prompt that changes the wrong or multiple sections."""
+    wrong_section = valid_package()
+    baseline = wrong_section["prompts"]["reconstruction_t2v"]
+    wrong_section["prompts"]["single_variable_variants"][0]["prompt"] = replace_prompt_section(
+        baseline, "LIGHTING", "Cold blue light changes instead of the camera."
+    )
+    with pytest.raises(ValueError, match="camera_motion.*only CAMERA"):
+        validate_prompt_package(wrong_section)
+
+    two_sections = valid_package()
+    variant = two_sections["prompts"]["single_variable_variants"][0]["prompt"]
+    two_sections["prompts"]["single_variable_variants"][0]["prompt"] = replace_prompt_section(
+        variant, "LIGHTING", "Camera and lighting both change."
+    )
+    with pytest.raises(ValueError, match="camera_motion.*only CAMERA"):
+        validate_prompt_package(two_sections)
+
+    unsupported = valid_package()
+    unsupported["prompts"]["single_variable_variants"][0]["changed_dimension"] = "wardrobe"
+    with pytest.raises(ValueError, match="allowed changed_dimension"):
+        validate_prompt_package(unsupported)
 
 
 def test_validate_rejects_reordered_overlapping_or_out_of_bounds_shots():
@@ -237,6 +321,12 @@ def test_validate_keeps_engine_parameters_structured_and_out_of_prompt_prose():
             "secret-like key",
         ),
         (
+            lambda package: package["engine"]["parameters"].update(
+                {"apikey": "credential-shaped-field"}
+            ),
+            "secret-like key",
+        ),
+        (
             lambda package: package["uncertainties"].append(
                 "Authorization: Bearer abcdefghijklmnopqrstuvwxyz"
             ),
@@ -297,6 +387,21 @@ def test_validate_keeps_source_constraints_separate_from_generation_negatives():
         validate_prompt_package(empty_category)
 
 
+def test_validate_rejects_normalized_overlap_between_negative_categories():
+    """Comparing raw strings would miss the same negative phrased with case/punctuation changes."""
+    overlapping = valid_package()
+    overlapping["negative_constraints"]["reconstruction_source"] = ["No identity drift."]
+    overlapping["negative_constraints"]["generation_stability"] = [
+        "  NO identity-drift!  "
+    ]
+
+    with pytest.raises(ValueError, match="negative constraint categories.*overlap"):
+        validate_prompt_package(overlapping)
+
+    distinct = valid_package()
+    validate_prompt_package(distinct)
+
+
 def test_validate_requires_portable_evidence_references_and_described_shots():
     """Allowing empty, parent-traversing, or undescribed shot evidence must break this test."""
     no_evidence = deepcopy(valid_package())
@@ -313,6 +418,35 @@ def test_validate_requires_portable_evidence_references_and_described_shots():
     blank_description["shots"][0]["description"] = " "
     with pytest.raises(ValueError, match="description.*non-empty"):
         validate_prompt_package(blank_description)
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "https://example.com/frame.jpg",
+        "C:frames/frame.jpg",
+        "frames/bad>name.jpg",
+        "frames/line\nbreak.jpg",
+        "frames//frame.jpg",
+        "./frames/frame.jpg",
+        "frames/",
+    ],
+)
+def test_validate_rejects_non_local_or_malformed_evidence_references(reference):
+    """Treating arbitrary strings as relative paths would allow URI or Markdown/path injection."""
+    package = valid_package()
+    package["shots"][0]["evidence_refs"] = [reference]
+
+    with pytest.raises(ValueError, match="portable relative paths"):
+        validate_prompt_package(package)
+
+
+def test_validate_accepts_normal_nested_relative_evidence_reference():
+    """Overly broad path rejection must not block a normal nested task-local reference."""
+    package = valid_package()
+    package["shots"][0]["evidence_refs"] = ["evidence/shot-001/entry frame.jpg"]
+
+    validate_prompt_package(package)
 
 
 def test_validate_rejects_cross_namespace_source_references():
@@ -381,3 +515,42 @@ def test_validate_preserves_requested_metadata_media_and_engine_context():
             "parameters": expected_engine["parameters"],
         },
     )
+
+
+def test_validate_rejects_non_finite_numeric_fields():
+    """Removing finite-number checks would allow non-standard JSON values into a package."""
+    package = valid_package()
+    package["media"]["duration_seconds"] = math.nan
+
+    with pytest.raises(ValueError, match="finite"):
+        validate_prompt_package(package)
+
+    engine_nan = valid_package()
+    engine_nan["engine"]["parameters"]["guidance"] = math.inf
+    with pytest.raises(ValueError, match="engine.parameters.*finite"):
+        validate_prompt_package(engine_nan)
+
+
+@pytest.mark.parametrize("invalid_kind", ["duplicate", "nan"])
+def test_validator_cli_rejects_ambiguous_or_non_standard_json(tmp_path, invalid_kind):
+    """Using permissive json.loads at the CLI boundary would accept invalid package files."""
+    package = valid_package()
+    if invalid_kind == "duplicate":
+        raw = json.dumps(package)
+        raw = raw[:-1] + ', "metadata": ' + json.dumps(package["metadata"]) + "}"
+    else:
+        package["media"]["duration_seconds"] = math.nan
+        raw = json.dumps(package)
+    package_path = tmp_path / "prompt-package.json"
+    package_path.write_text(raw, encoding="utf-8")
+    script = Path(__file__).resolve().parents[1] / "scripts" / "validate_prompt_package.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), str(package_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert "strict JSON" in completed.stderr
