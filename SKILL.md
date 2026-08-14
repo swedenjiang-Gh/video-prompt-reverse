@@ -42,7 +42,7 @@ After both directions pass, the result may say `source-closed`. If any prompt at
 
 Do not let a broad source summary license unlisted detail. Hair, identity, earrings, necklaces, garments, prop state, layout, pose, depth of field, illumination, and every other prompt detail must each be explicit in the named stream or explicitly marked as a conservative/creative choice in its owner section.
 
-Before `reconstruction_i2v`, print `I2V input asset: <portable evidence or input-asset path>; role: first-frame|reference; authorization: approved`. The path must identify the actual authorized image selected for I2V. If none was supplied and approved, print `I2V input asset: no approved reference image supplied`, keep the I2V prompt conditional, and do not claim that identity, framing, or appearance is locked to an input image.
+Before `reconstruction_i2v`, print `I2V input asset: <portable evidence or input-asset path>; role: first-frame|reference; authorization: approved`. The path must identify the actual authorized image selected for I2V. For a project request, select it from the project's approved assets first, then `D:\MediaStudio\assets\`; never scan arbitrary disks. If neither has an approved reference, print `I2V input asset: no approved reference image supplied`, keep the I2V prompt conditional, and do not claim that identity, framing, or appearance is locked to an input image.
 
 Print every single-variable variant as a complete standalone prompt with all eight canonical sections in order. Copy the seven unchanged sections in full from `reconstruction_t2v`; change exactly the section mapped by `changed_dimension`. Never deliver a replacement line, ellipsis, baseline reference, `same as above`, or `other sections unchanged` shorthand.
 
