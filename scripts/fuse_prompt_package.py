@@ -5,6 +5,11 @@ from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
+
+try:
+    from scripts.output_paths import resolve_task_output
+except ModuleNotFoundError:
+    from output_paths import resolve_task_output
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
@@ -935,13 +940,21 @@ def main() -> None:
     parser.add_argument("--target-engine", type=Path, required=True)
     parser.add_argument("--mode", required=True)
     parser.add_argument("--task", required=True)
+    parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--project-output", type=Path)
     parser.add_argument("--generated-at")
     parser.add_argument("--server-url")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    if not args.task or args.task in {".", ".."} or any(mark in args.task for mark in ("/", "\\")):
-        parser.error("--task must be one local task directory name")
+    try:
+        output_dir = resolve_task_output(
+            args.task,
+            output_root=args.output_root,
+            project_output=args.project_output,
+        )
+    except ValueError as error:
+        parser.error(str(error))
     if not args.dry_run and not args.server_url:
         parser.error("--server-url is required unless --dry-run is used")
 
@@ -958,7 +971,6 @@ def main() -> None:
         "mode": args.mode,
         "generated_at": generated_at,
     }
-    output_dir = Path("D:/VideoLearning/work") / args.task / "video-prompt-reverse"
     if args.dry_run:
         request = prepare_fusion_dry_run(**inputs)
         output_dir.mkdir(parents=True, exist_ok=True)

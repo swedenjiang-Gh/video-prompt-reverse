@@ -6,6 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from scripts.output_paths import resolve_task_output
+except ModuleNotFoundError:
+    from output_paths import resolve_task_output
+
 
 def build_manifest(video_path: Path, probe: dict, intervals: list[dict], frames: list[dict]) -> dict:
     """Return a chronological evidence manifest without rescanning the source video."""
@@ -178,9 +183,15 @@ if __name__ == "__main__":
     parser.add_argument("video_path", type=Path)
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--task", required=True)
+    parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--project-output", type=Path)
     args = parser.parse_args()
 
-    output_dir = Path("D:/VideoLearning/work") / args.task / "video-prompt-reverse"
+    output_dir = resolve_task_output(
+        args.task,
+        output_root=args.output_root,
+        project_output=args.project_output,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     video_learning_scripts = Path(__file__).resolve().parents[2] / "video-learning" / "scripts"
     probe = json.loads(args.probe.read_text(encoding="utf-8"))

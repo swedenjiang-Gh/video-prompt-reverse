@@ -10,6 +10,11 @@ import json
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+try:
+    from scripts.output_paths import resolve_task_output
+except ModuleNotFoundError:
+    from output_paths import resolve_task_output
+
 
 STRUCTURAL_FIELDS = (
     "shot_id",
@@ -301,11 +306,17 @@ def main() -> None:
     parser.add_argument("--frame-budget", type=int, default=3)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--project-output", type=Path)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     manifest = json.loads(args.evidence_manifest.read_text(encoding="utf-8"))
-    output_root = Path("D:/VideoLearning/work") / args.task / "video-prompt-reverse"
+    output_root = resolve_task_output(
+        args.task,
+        output_root=args.output_root,
+        project_output=args.project_output,
+    )
     if args.dry_run:
         result = prepare_dry_run(
             manifest,

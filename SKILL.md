@@ -11,6 +11,10 @@ Enter through `media-studio-orchestrator`. Own reverse-prompt analysis only. Del
 
 Never submit a local or cloud generation task silently.
 
+## Output ownership
+
+If prompt reverse is one stage of a short-drama or video-production project, keep its evidence, structured records, prompt package, comparison outputs, and acceptance notes in that project. Otherwise create one self-contained job under `VIDEO_PROMPT_REVERSE_ROOT\<job>\` (default `D:\MediaStudio\VideoPromptReverse\<job>\`). Optional H3/Wan generation is only an execution step: move the resulting comparison media into the owning reverse job or project instead of classifying it as a standalone ComfyUI deliverable. Do not copy a source download into the job; reference its centralized path.
+
 ## Workflow
 
 1. Confirm authorization and source class. Stop if access requires bypassing controls.
